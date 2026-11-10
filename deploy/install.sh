@@ -26,19 +26,58 @@ warn(){ printf '    \033[33m!\033[0m %s\n' "$*"; }
 
 # ---------- 1. 取代码 ----------
 say "1/7 获取代码"
+# 国内机房直连 github 常被中断，依次尝试：直连 → 镜像 → 压缩包
+MIRRORS="https://ghproxy.net/ https://gh-proxy.com/ https://ghfast.top/"
+got=0
+
 if [ -d "$APP_DIR/.git" ]; then
-  git -C "$APP_DIR" fetch --quiet origin main
-  git -C "$APP_DIR" reset --hard --quiet origin/main
-  ok "已更新到最新版本"
-else
-  rm -rf "$APP_DIR"
-  git clone --depth 1 "$REPO" "$APP_DIR" || {
-    echo
-    echo "拉取代码失败。如果仓库还是 Private，请先把它改成 Public，"
-    echo "或者手动把代码放到 $APP_DIR 后重新运行本脚本。"
-    exit 1
-  }
-  ok "已克隆到 $APP_DIR"
+  if git -C "$APP_DIR" fetch --quiet origin main 2>/dev/null; then
+    git -C "$APP_DIR" reset --hard --quiet origin/main
+    ok "已更新到最新版本"
+  else
+    warn "更新失败（网络），沿用现有代码"
+  fi
+  got=1
+elif [ -f "$APP_DIR/package.json" ]; then
+  ok "已存在代码目录，跳过下载"
+  got=1
+fi
+
+if [ "$got" -eq 0 ]; then
+  for prefix in "" $MIRRORS; do
+    name="${prefix:-直连}"
+    if git clone --depth 1 "${prefix}${REPO}" "$APP_DIR" >/dev/null 2>&1; then
+      ok "已克隆（${name}）"
+      got=1
+      break
+    fi
+    rm -rf "$APP_DIR"
+  done
+fi
+
+if [ "$got" -eq 0 ]; then
+  warn "git 不通，改用压缩包下载"
+  for prefix in "" $MIRRORS; do
+    name="${prefix:-直连}"
+    url="${prefix}${REPO%.git}/archive/refs/heads/main.tar.gz"
+    if curl -fsSL --max-time 120 "$url" -o /tmp/ledger-src.tgz 2>/dev/null \
+       && tar tzf /tmp/ledger-src.tgz >/dev/null 2>&1; then
+      mkdir -p "$APP_DIR"
+      tar xzf /tmp/ledger-src.tgz -C "$APP_DIR" --strip-components=1
+      rm -f /tmp/ledger-src.tgz
+      ok "已解压源码（${name}）"
+      got=1
+      break
+    fi
+    rm -f /tmp/ledger-src.tgz
+  done
+fi
+
+if [ "$got" -eq 0 ]; then
+  echo
+  echo "拉取代码失败：直连和镜像都不通。"
+  echo "可以手动把源码放到 $APP_DIR 后重新运行本脚本。"
+  exit 1
 fi
 
 # ---------- 2. Node.js ----------
@@ -188,5 +227,5 @@ echo "    常用命令："
 echo "      systemctl status ledger          查看状态"
 echo "      systemctl restart ledger         重启"
 echo "      journalctl -u ledger -n 50       看日志"
-echo "      cd ${APP_DIR} && git pull && npm install --omit=dev && systemctl restart ledger   更新"
+echo "      bash $(pwd)/deploy/install.sh     重新跑一遍（等于更新）"
 echo "---------------------------------------------"

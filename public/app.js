@@ -101,10 +101,31 @@ function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+/* 备案号由服务端下发，绑域名对外访问时按工信部要求必须展示 */
+async function loadIcp() {
+  let text = '';
+  try {
+    const res = await fetch(`${API_BASE}/api/health`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      text = (data && data.icp) || '';
+    }
+  } catch {
+    return;
+  }
+  for (const id of ['icpAuth', 'icpSettings']) {
+    const el = $(id);
+    if (!el) continue;
+    el.textContent = text;
+    el.hidden = !text;
+  }
+}
+
 function showAuth(message) {
   $('appRoot').hidden = true;
   $('authScreen').hidden = false;
   syncServerField();
+  loadIcp();
   if (message) {
     const el = $('authError');
     el.textContent = message;
@@ -116,6 +137,7 @@ function showApp() {
   $('authScreen').hidden = true;
   $('appRoot').hidden = false;
   $('offlineBar').hidden = !state.offline;
+  loadIcp();
   renderAll();
 }
 

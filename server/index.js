@@ -234,7 +234,13 @@ app.post('/api/import', auth, (req, res, next) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, aiEnabled: aiEnabled(), users: store.users.length, records: store.records.length });
+  res.json({
+    ok: true,
+    aiEnabled: aiEnabled(),
+    users: store.users.length,
+    records: store.records.length,
+    icp: (process.env.ICP_BEIAN || '').trim(),
+  });
 });
 
 /* ---------- 静态资源 ---------- */

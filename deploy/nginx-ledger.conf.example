@@ -1,18 +1,18 @@
 # 小账本反向代理配置（子域名 → 本机 8080）
 #
 # 用法：
-#   1. 把下面两处 ledger.example.com 换成你自己的子域名
+#   1. 把下面两处 ledger.krshare.site 换成你自己的子域名（子域名沿用主域名备案，不用再备案）
 #   2. 复制到 /etc/nginx/conf.d/ledger.conf
 #   3. nginx -t && systemctl reload nginx
 #   4. 签发证书（certbot 会自动补上 443 与跳转配置）：
 #        apt install -y certbot python3-certbot-nginx
-#        certbot --nginx -d ledger.example.com
+#        certbot --nginx -d ledger.krshare.site
 #
 # 注意：只写了 80 端口这一段，443 交给 certbot 自动生成，避免手写证书路径出错。
 
 server {
     listen 80;
-    server_name ledger.example.com;
+    server_name ledger.krshare.site;
 
     # certbot 验证目录
     location /.well-known/acme-challenge/ {

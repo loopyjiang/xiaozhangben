@@ -403,6 +403,15 @@ h1, h2, h3, p { margin: 0; }
 .user-row .desc { display: block; margin-top: 3px; }
 
 .version { text-align: center; font-size: 11px; color: var(--ink-3); margin-top: 18px; }
+.icp {
+  display: block;
+  margin-top: 10px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.icp:active { color: var(--pink); }
 
 /* ---------- 底部导航 ---------- */
 .tabbar {

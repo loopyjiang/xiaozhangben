@@ -1,0 +1,110 @@
+name: 构建手机安装包
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  android:
+    name: 安卓 APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: 安装依赖
+        run: npm install --no-audit --no-fund
+
+      - name: 生成图标
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-pil
+          python3 tools/gen_icons.py
+
+      - name: 生成安卓工程
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: 生成启动图标
+        continue-on-error: true
+        run: npx --yes @capacitor/assets generate --android
+
+      - name: 打包 debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: xiaozhangben-android-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS 未签名包（需自签才能安装）
+    runs-on: macos-14
+    if: github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装依赖
+        run: npm install --no-audit --no-fund
+
+      - name: 生成图标
+        run: |
+          python3 -m pip install --quiet --user pillow
+          python3 tools/gen_icons.py
+
+      - name: 生成 iOS 工程
+        run: |
+          npx cap add ios
+          npx cap sync ios
+
+      - name: 生成启动图标
+        continue-on-error: true
+        run: npx --yes @capacitor/assets generate --ios
+
+      - name: 允许 http 明文请求
+        run: |
+          PLIST="ios/App/App/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" || true
+
+      - name: 编译（不签名）
+        run: |
+          cd ios/App
+          xcodebuild -workspace App.xcworkspace -scheme App \
+            -configuration Release -sdk iphoneos \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            archive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      - name: 打包成 ipa
+        run: |
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qr "$RUNNER_TEMP/xiaozhangben-unsigned.ipa" Payload
+
+      - name: 上传未签名包
+        uses: actions/upload-artifact@v4
+        with:
+          name: xiaozhangben-ios-unsigned
+          path: ${{ runner.temp }}/xiaozhangben-unsigned.ipa
+          if-no-files-found: warn

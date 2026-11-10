@@ -1,0 +1,15 @@
+node_modules/
+data/
+.env
+*.log
+.DS_Store
+
+# 生成物（CI 与部署脚本会现场生成，避免往仓库塞二进制）
+public/icons/
+assets/
+android/
+ios/
+
+# 本地调试产物
+shots/
+*.zip

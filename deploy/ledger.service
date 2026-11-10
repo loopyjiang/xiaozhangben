@@ -1,0 +1,23 @@
+[Unit]
+Description=小账本 (ledger-app)
+After=network.target
+
+[Service]
+Type=simple
+User=ledger
+WorkingDirectory=/opt/ledger-app
+EnvironmentFile=/opt/ledger-app/.env
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/ledger.log
+StandardError=append:/var/log/ledger.log
+
+# 基础加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/ledger /opt/ledger-app
+
+[Install]
+WantedBy=multi-user.target

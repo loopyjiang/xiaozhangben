@@ -1,0 +1,15 @@
+{
+  "appId": "com.xiaozhangben.ledger",
+  "appName": "小账本",
+  "webDir": "public",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}

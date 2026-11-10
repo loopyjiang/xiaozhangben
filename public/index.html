@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#FFF7F5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="小账本">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="app.css">
+<title>小账本</title>
+</head>
+<body>
+
+<div class="offline-bar" id="offlineBar" hidden>离线模式 · 只能查看，记账需要联网</div>
+
+<!-- 登录 -->
+<section class="auth" id="authScreen">
+  <div class="auth-inner">
+    <div class="brand">
+      <div class="brand-mark">¥</div>
+      <h1>小账本</h1>
+      <p>记下每一笔，钱就清楚了</p>
+    </div>
+
+    <div class="auth-switch">
+      <button class="active" data-mode="login">登录</button>
+      <button data-mode="register">注册</button>
+    </div>
+
+    <form id="authForm" autocomplete="on">
+      <label class="field" id="serverField" hidden>
+        <span>服务器地址</span>
+        <input id="authServer" type="text" inputmode="url" placeholder="http://123.45.67.89:8080"
+               autocomplete="off" spellcheck="false">
+      </label>
+      <label class="field">
+        <span>用户名</span>
+        <input id="authUser" name="username" type="text" autocomplete="username" placeholder="2-20 位" required>
+      </label>
+      <label class="field">
+        <span>密码</span>
+        <input id="authPass" name="password" type="password" autocomplete="current-password" placeholder="至少 6 位" required>
+      </label>
+      <label class="field" id="codeField" hidden>
+        <span>注册码</span>
+        <input id="authCode" type="text" placeholder="向管理员索取" autocomplete="off">
+      </label>
+      <p class="auth-error" id="authError" hidden></p>
+      <button class="btn primary" type="submit" id="authSubmit">登录</button>
+    </form>
+
+    <p class="auth-foot">数据存放在你自己的服务器上，不会传给任何第三方。</p>
+    <button type="button" class="link-btn" id="serverToggle">配置服务器地址</button>
+  </div>
+</section>
+
+<!-- 主应用 -->
+<div class="app" id="appRoot" hidden>
+  <header class="topbar">
+    <button class="month-nav" id="prevMonth" aria-label="上个月">‹</button>
+    <div class="month-label" id="monthLabel">2026年11月</div>
+    <button class="month-nav" id="nextMonth" aria-label="下个月">›</button>
+  </header>
+
+  <main class="main">
+
+    <section class="view active" id="view-home">
+      <div class="summary-card">
+        <div class="summary-main">
+          <span class="summary-cap">本月支出</span>
+          <div class="summary-amount"><span class="cur">¥</span><span id="sumExpense">0.00</span></div>
+        </div>
+        <div class="summary-sub">
+          <div><span class="cap">收入</span><b id="sumIncome">¥0.00</b></div>
+          <div><span class="cap">结余</span><b id="sumBalance">¥0.00</b></div>
+          <div><span class="cap">笔数</span><b id="sumCount">0</b></div>
+        </div>
+      </div>
+
+      <form class="ai-bar" id="aiForm" hidden>
+        <input id="aiInput" type="text" placeholder="一句话记账：午饭 28" maxlength="200" autocomplete="off">
+        <button type="submit" id="aiSend" aria-label="AI 记账">记</button>
+      </form>
+
+      <div class="section-head">
+        <h2>明细</h2>
+        <span class="hint" id="listHint"></span>
+      </div>
+      <div class="record-list" id="recordList"></div>
+    </section>
+
+    <section class="view" id="view-stats">
+      <div class="summary-card compact">
+        <div class="summary-main">
+          <span class="summary-cap">本月总支出</span>
+          <div class="summary-amount"><span class="cur">¥</span><span id="statTotal">0.00</span></div>
+        </div>
+        <div class="summary-sub">
+          <div><span class="cap">日均</span><b id="statDaily">¥0.00</b></div>
+          <div><span class="cap">笔数</span><b id="statCount">0</b></div>
+        </div>
+      </div>
+
+      <div class="section-head"><h2>支出构成</h2></div>
+      <div class="cat-list" id="catList"></div>
+
+      <div class="section-head"><h2>近 6 个月</h2></div>
+      <div class="trend" id="trend"></div>
+    </section>
+
+    <section class="view" id="view-settings">
+      <div class="card">
+        <div class="user-row">
+          <div class="avatar" id="avatar">小</div>
+          <div>
+            <b id="userName">—</b>
+            <span class="desc" id="userSince"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>AI 记账</h3>
+        <p class="desc" id="aiStatus">检查中…</p>
+        <p class="desc">Key 配置在服务器的环境变量里，手机端看不到，也不会外泄。</p>
+      </div>
+
+      <div class="card">
+        <h3>数据</h3>
+        <p class="desc">数据已经存在服务器上，换手机登录同一个账号就能看到。定期导出一份更保险。</p>
+        <div class="row-btns">
+          <button class="btn ghost" id="exportBtn">导出备份</button>
+          <button class="btn ghost" id="importBtn">导入备份</button>
+        </div>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+      </div>
+
+      <div class="card">
+        <h3>安装到手机</h3>
+        <p class="desc" id="installHint">iPhone 用 Safari 打开 → 分享 → 添加到主屏幕。安卓用 Chrome 打开 → 右上角菜单 → 安装应用。</p>
+        <button class="btn ghost full" id="installBtn" hidden>立即安装</button>
+      </div>
+
+      <button class="btn ghost danger full" id="logoutBtn">退出登录</button>
+      <p class="version">小账本 v1.0 · 自托管</p>
+    </section>
+
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-view="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      <span>明细</span>
+    </button>
+    <button class="tab" data-view="stats">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M5 19V11M12 19V5M19 19v-6"/></svg>
+      <span>统计</span>
+    </button>
+    <button class="tab" data-view="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-3.6 3.4-5.6 7.5-5.6s7.5 2 7.5 5.6"/></svg>
+      <span>我的</span>
+    </button>
+  </nav>
+
+  <button class="fab" id="fabAdd" aria-label="记一笔">+</button>
+</div>
+
+<div class="sheet-mask" id="sheetMask"></div>
+
+<div class="sheet" id="sheet">
+  <div class="sheet-head">
+    <button class="sheet-cancel" id="sheetCancel">取消</button>
+    <div class="type-switch">
+      <button class="type-btn active" data-type="expense">支出</button>
+      <button class="type-btn" data-type="income">收入</button>
+    </div>
+    <button class="sheet-save" id="sheetSave">保存</button>
+  </div>
+
+  <div class="amount-display">
+    <span class="cur">¥</span><span id="amountText">0</span>
+  </div>
+
+  <div class="cat-grid" id="catGrid"></div>
+
+  <div class="sheet-fields">
+    <input type="date" id="dateInput" class="field-input">
+    <input type="text" id="noteInput" class="field-input" placeholder="备注（选填）" maxlength="40">
+  </div>
+
+  <div class="numpad" id="numpad">
+    <button data-k="1">1</button>
+    <button data-k="2">2</button>
+    <button data-k="3">3</button>
+    <button data-k="4">4</button>
+    <button data-k="5">5</button>
+    <button data-k="6">6</button>
+    <button data-k="7">7</button>
+    <button data-k="8">8</button>
+    <button data-k="9">9</button>
+    <button data-k=".">.</button>
+    <button data-k="0">0</button>
+    <button data-k="del" class="del">⌫</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

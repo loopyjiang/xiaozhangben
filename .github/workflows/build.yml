@@ -3,6 +3,10 @@ name: 构建手机安装包
 on:
   push:
     branches: [main]
+    # 只改文档时不必重新打包
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
 
 jobs:

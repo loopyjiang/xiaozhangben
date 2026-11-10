@@ -176,7 +176,11 @@ else
   CONF=/etc/nginx/conf.d/ledger.conf
 fi
 
-cat > "$CONF" <<NGINX
+WROTE_CONF=0
+if [ -f "$CONF" ] && grep -q 'listen 443' "$CONF"; then
+  ok "已有 HTTPS 配置，保留不动（如需重建请先删 $CONF）"
+else
+  cat > "$CONF" <<NGINX
 # 小账本 - 由 deploy/install.sh 生成
 server {
     listen 80;
@@ -198,6 +202,8 @@ server {
     }
 }
 NGINX
+  WROTE_CONF=1
+fi
 
 if [ "$CONF" = "/etc/nginx/sites-available/ledger.conf" ]; then
   ln -sf "$CONF" /etc/nginx/sites-enabled/ledger.conf
@@ -208,9 +214,12 @@ if nginx -t >/dev/null 2>&1; then
   sleep 2
   ok "nginx 已重载，未改动其他站点"
 else
-  warn "nginx 配置校验失败，已撤销本次改动。详情："
+  warn "nginx 配置校验失败。详情："
   nginx -t || true
-  rm -f "$CONF" /etc/nginx/sites-enabled/ledger.conf
+  if [ "${WROTE_CONF:-0}" = "1" ]; then
+    warn "已撤销本次写入的配置"
+    rm -f "$CONF" /etc/nginx/sites-enabled/ledger.conf
+  fi
   exit 1
 fi
 

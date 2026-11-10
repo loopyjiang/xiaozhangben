@@ -8,7 +8,7 @@ import {
   hashPassword, verifyPassword, createSession, destroySession,
   userFromToken, publicUser,
 } from './auth.js';
-import { parseRecords, aiEnabled, EXPENSE_CATS, INCOME_CATS } from './ai.js';
+import { parseRecords, aiEnabled, aiInfo, EXPENSE_CATS, INCOME_CATS } from './ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -239,6 +239,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
     aiEnabled: aiEnabled(),
+    ai: aiEnabled() ? aiInfo() : null,
     users: store.users.length,
     records: store.records.length,
     icp: (process.env.ICP_BEIAN || '').trim(),
@@ -269,6 +270,10 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, HOST, () => {
   console.log(`小账本服务已启动： http://${HOST}:${PORT}`);
-  console.log(`AI 功能：${aiEnabled() ? '已启用' : '未配置 DEEPSEEK_API_KEY'}`);
+  console.log(
+    aiEnabled()
+      ? `AI 功能：已启用（${aiInfo().model}${aiInfo().thinking === false ? '，已关思考' : ''}）`
+      : 'AI 功能：未配置（在 .env 里填 AI_API_KEY 或 QWEN_API_KEY 即可启用）'
+  );
   if (!REGISTER_CODE) console.log('提示：未设置 REGISTER_CODE，任何人都能注册账号');
 });

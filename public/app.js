@@ -401,7 +401,7 @@ function renderSettings() {
 
   $('aiStatus').textContent = state.aiEnabled
     ? '已启用，直接在首页输入「午饭 28」就能记。'
-    : '未启用。在服务器上配置 DEEPSEEK_API_KEY 后重启服务即可。';
+    : '未启用。在服务器的 .env 里填 AI_API_KEY 后重启服务即可。';
 
   $('aiForm').hidden = !state.aiEnabled || state.offline;
 }

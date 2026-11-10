@@ -13,6 +13,8 @@ import { parseRecords, aiEnabled, EXPENSE_CATS, INCOME_CATS } from './ai.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const PORT = Number(process.env.PORT || 8080);
+/* 默认只监听本机，由 nginx 反代对外；确实需要直连时把 HOST 设成 0.0.0.0 */
+const HOST = process.env.HOST || '127.0.0.1';
 const REGISTER_CODE = process.env.REGISTER_CODE || '';
 
 const app = express();
@@ -265,8 +267,8 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: err.message || '服务器出错了' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`小账本服务已启动： http://0.0.0.0:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`小账本服务已启动： http://${HOST}:${PORT}`);
   console.log(`AI 功能：${aiEnabled() ? '已启用' : '未配置 DEEPSEEK_API_KEY'}`);
   if (!REGISTER_CODE) console.log('提示：未设置 REGISTER_CODE，任何人都能注册账号');
 });

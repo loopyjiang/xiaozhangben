@@ -39,7 +39,21 @@ if [ -d "$APP_DIR/.git" ]; then
   fi
   got=1
 elif [ -f "$APP_DIR/package.json" ]; then
-  ok "已存在代码目录，跳过下载"
+  ok "已存在代码目录"
+  # 当初是用压缩包解压的（没有 .git）时，用压缩包整体刷新一遍；.env 不会被覆盖
+  if [ ! -d "$APP_DIR/.git" ]; then
+    for prefix in "" $MIRRORS; do
+      url="${prefix}${REPO%.git}/archive/refs/heads/main.tar.gz"
+      if curl -fsSL --max-time 120 "$url" -o /tmp/ledger-src.tgz 2>/dev/null \
+         && tar tzf /tmp/ledger-src.tgz >/dev/null 2>&1; then
+        tar xzf /tmp/ledger-src.tgz -C "$APP_DIR" --strip-components=1
+        rm -f /tmp/ledger-src.tgz
+        ok "已用压缩包刷新代码（${prefix:-直连}）"
+        break
+      fi
+      rm -f /tmp/ledger-src.tgz
+    done
+  fi
   got=1
 fi
 
@@ -191,6 +205,7 @@ fi
 
 if nginx -t >/dev/null 2>&1; then
   systemctl reload nginx
+  sleep 2
   ok "nginx 已重载，未改动其他站点"
 else
   warn "nginx 配置校验失败，已撤销本次改动。详情："
@@ -202,19 +217,15 @@ fi
 curl -fsS --max-time 5 -H "Host: ${DOMAIN}" "http://127.0.0.1/" >/dev/null && ok "反向代理链路通" || warn "反向代理自测未通过"
 
 # ---------- 7. HTTPS ----------
-say "7/7 申请证书"
-if ! command -v certbot >/dev/null 2>&1; then
-  DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-nginx >/dev/null 2>&1 || true
-fi
-if command -v certbot >/dev/null 2>&1; then
-  if certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --redirect --keep-until-expiring 2>&1 | tail -6; then
-    ok "证书已签发"
+say "7/7 申请证书并启用 HTTPS"
+if [ -f "$APP_DIR/deploy/enable-https.sh" ]; then
+  if bash "$APP_DIR/deploy/enable-https.sh"; then
+    ok "HTTPS 已启用"
   else
-    warn "自动签发失败，多半是 DNS 还没生效。解析就绪后手动执行："
-    echo "    certbot --nginx -d ${DOMAIN} --redirect"
+    warn "HTTPS 未完成，稍后可手动重试： sudo bash $APP_DIR/deploy/enable-https.sh"
   fi
 else
-  warn "没有 certbot，请手动配置 HTTPS"
+  warn "未找到 deploy/enable-https.sh，跳过"
 fi
 
 # ---------- 收尾 ----------

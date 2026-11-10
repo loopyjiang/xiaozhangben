@@ -17,6 +17,7 @@ const args = Object.fromEntries(
 const URL_ = args.url || 'http://127.0.0.1:8899/';
 const OUT = args.out || 'shot.png';
 const JS = args.js || '';
+const JS2 = args.js2 || '';
 const WAIT = Number(args.wait || 900);
 const WIDTH = Number(args.width || 390);
 const HEIGHT = Number(args.height || 844);
@@ -92,6 +93,16 @@ try {
     });
     if (r.exceptionDetails) console.error('JS 报错：', JSON.stringify(r.exceptionDetails).slice(0, 500));
     else if (r.result?.value !== undefined) console.log('JS 返回：', JSON.stringify(r.result.value).slice(0, 800));
+    await sleep(WAIT);
+  }
+
+  /* 第二段脚本：常用来在 reload 之后点击某个页面元素 */
+  if (JS2) {
+    const r2 = await send('Runtime.evaluate', {
+      expression: JS2, awaitPromise: true, returnByValue: true,
+    });
+    if (r2.exceptionDetails) console.error('JS2 报错：', JSON.stringify(r2.exceptionDetails).slice(0, 500));
+    else if (r2.result?.value !== undefined) console.log('JS2 返回：', JSON.stringify(r2.result.value).slice(0, 800));
     await sleep(WAIT);
   }
 

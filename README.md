@@ -1,4 +1,4 @@
-# 小账本
+# Loopy 小账本
 
 给家里人用的手机记账 App：**手机端 + 自己的服务器**，账目存在自己机器上，不经过任何第三方记账平台。
 
@@ -6,16 +6,21 @@
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/home.png" width="220" /></td>
-    <td><img src="docs/screenshots/stats.png" width="220" /></td>
-    <td><img src="docs/screenshots/add.png" width="220" /></td>
+    <td><img src="docs/screenshots/login.webp" width="200" /></td>
+    <td><img src="docs/screenshots/home.webp" width="200" /></td>
+    <td><img src="docs/screenshots/stats.webp" width="200" /></td>
+    <td><img src="docs/screenshots/add.webp" width="200" /></td>
   </tr>
   <tr align="center">
+    <td><sub>登录</sub></td>
     <td><sub>明细 + 一句话记账</sub></td>
     <td><sub>月度统计</sub></td>
     <td><sub>记账面板</sub></td>
   </tr>
 </table>
+
+界面沿用最初那版 Loopy 设计的配色与排版：背景 `#fff5f8`、正文 `#694454`、主色 `#d976a0`、描边 `#efd5e1`，
+卡片 24px 圆角、输入框和按钮 14px 圆角。分类图标直接用了 Loopy 的九种小表情。
 
 ---
 
@@ -263,7 +268,10 @@ ledger-app/
 │   ├── app.js
 │   ├── manifest.webmanifest
 │   ├── sw.js              Service Worker 离线缓存
-│   └── icons/
+│   ├── icons/             PWA / 主屏图标
+│   └── loopy/             九种 Loopy 表情（分类图标、头像、登录页主图）
+├── assets/
+│   └── loopy-head.webp    1024px 头部素材，画 App 图标用
 ├── deploy/
 │   ├── install.sh         一键部署
 │   ├── update.sh          只更新代码
@@ -271,7 +279,8 @@ ledger-app/
 │   ├── ledger.service     systemd 单元
 │   └── nginx-ledger.conf.example
 ├── tools/
-│   ├── gen_icons.py       几何绘制生成全套图标，不依赖字体
+│   ├── gen_icons.py       粉底 + Loopy 头生成全套图标，素材缺失时退回 ¥ 图标
+│   ├── split_loopy.py     把 3×3 精灵图拆成单帧 / 头像 / 高清主图
 │   └── shot.mjs           CDP 手机视口截图，用于自查界面
 └── .github/workflows/
     └── build.yml          云端构建安卓 APK / iOS 未签名包
@@ -297,3 +306,6 @@ ledger-app/
 ## License
 
 私人自用项目，未做对外开源授权。想拿去改成自己的记账应用，自行 fork 即可。
+
+`public/loopy/` 和 `assets/loopy-head.webp` 里的 Loopy 形象版权归原作者所有，这里只当自用界面素材，
+不构成任何形式的授权或再分发。要对外发布请换掉这些图，其余代码不受影响。

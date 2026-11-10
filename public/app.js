@@ -23,6 +23,27 @@ const CATS = {
 const CAT_ICON = {};
 for (const list of Object.values(CATS)) for (const [name, icon] of list) CAT_ICON[name] = icon;
 
+/* 支出分类用 Loopy 的小表情当图标，收入仍用 emoji，一眼分得清收支 */
+const CAT_IMG = {
+  餐饮: 'loopy/02-eat.webp',
+  交通: 'loopy/03-car.webp',
+  购物: 'loopy/04-bag.webp',
+  家居: 'loopy/05-home.webp',
+  娱乐: 'loopy/06-music.webp',
+  医疗: 'loopy/07-flower.webp',
+  学习: 'loopy/08-study.webp',
+  人情: 'loopy/09-gift.webp',
+  其他: 'loopy/01-smile.webp',
+};
+
+/* 分类图标：支出用 Loopy 小表情，收入用 emoji，一眼分得清收支 */
+const catIcon = (name, type = 'expense', cls = '') => {
+  const src = type === 'expense' ? CAT_IMG[name] : '';
+  const attr = cls ? ` class="${cls}"` : '';
+  if (src) return `<img src="${src}" alt="" decoding="async"${attr}>`;
+  return `<span${attr}>${CAT_ICON[name] || '📦'}</span>`;
+};
+
 const WEEK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
 const $ = (id) => document.getElementById(id);
@@ -179,7 +200,7 @@ function setAuthMode(mode) {
     b.classList.toggle('active', b.dataset.mode === mode);
   });
   $('codeField').hidden = mode !== 'register';
-  $('authSubmit').textContent = mode === 'login' ? '登录' : '注册并进入';
+  $('authSubmit').textContent = mode === 'login' ? '打开我的小账本' : '开始记账';
   $('authPass').autocomplete = mode === 'login' ? 'current-password' : 'new-password';
   $('authError').hidden = true;
 }
@@ -281,7 +302,10 @@ function renderSummary(list) {
 function renderList(list) {
   const box = $('recordList');
   if (!list.length) {
-    box.innerHTML = `<div class="empty"><b>这个月还没有记账</b>点右下角的 + 记第一笔</div>`;
+    box.innerHTML = `<div class="empty">
+      <img src="loopy/04-bag.webp" alt="" width="132" height="132">
+      <b>这个月还没有记账</b>点右下角的 + 记第一笔
+    </div>`;
     return;
   }
 
@@ -311,10 +335,9 @@ function renderList(list) {
 
 function recordHtml(r) {
   const isIncome = r.type === 'income';
-  const icon = CAT_ICON[r.category] || '📦';
   const sub = r.note ? r.note : r.category;
   return `<div class="record" data-id="${r.id}">
-    <div class="ico">${icon}</div>
+    <div class="ico">${catIcon(r.category, r.type)}</div>
     <div class="meta">
       <div class="name">${escapeHtml(r.category)}</div>
       <div class="sub">${escapeHtml(sub)}</div>
@@ -350,7 +373,7 @@ function renderStats(list) {
       const pct = total ? (val / total) * 100 : 0;
       return `<div class="cat-row">
         <div class="cat-top">
-          <div class="left"><span>${CAT_ICON[name] || '📦'}</span><span class="nm">${escapeHtml(name)}</span>
+          <div class="left">${catIcon(name, 'expense')}<span class="nm">${escapeHtml(name)}</span>
           <span class="pc">${pct.toFixed(0)}%</span></div>
           <div class="val">¥${money(val)}</div>
         </div>
@@ -392,7 +415,6 @@ function renderTrend() {
 function renderSettings() {
   const name = state.user?.username || '—';
   $('userName').textContent = name;
-  $('avatar').textContent = name.slice(0, 1).toUpperCase();
 
   if (state.user?.createdAt) {
     const d = new Date(state.user.createdAt);
@@ -422,6 +444,8 @@ function switchView(view) {
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${view}`));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
   $('fabAdd').hidden = view === 'settings';
+  /* 我的页面不按月看，把月份切换收起来 */
+  document.querySelector('.month-switch').hidden = view === 'settings';
   window.scrollTo({ top: 0 });
 }
 
@@ -451,9 +475,9 @@ function closeSheet() {
 
 function renderCatGrid() {
   const list = CATS[state.draft.type];
-  $('catGrid').innerHTML = list.map(([name, icon]) => `
+  $('catGrid').innerHTML = list.map(([name]) => `
     <button class="cat-item ${state.draft.category === name ? 'active' : ''}" data-cat="${name}">
-      <span class="ci">${icon}</span><span>${name}</span>
+      ${catIcon(name, state.draft.type, 'ci')}<span>${name}</span>
     </button>`).join('');
 }
 
@@ -519,7 +543,7 @@ async function askAI(e) {
 
   const btn = $('aiSend');
   btn.disabled = true;
-  btn.textContent = '…';
+  btn.textContent = '记着…';
   try {
     const data = await api('/api/ai', { method: 'POST', body: { text } });
     const list = data.records || [];
@@ -539,7 +563,7 @@ async function askAI(e) {
     toast(err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = '记';
+    btn.textContent = '记一笔';
   }
 }
 

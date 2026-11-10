@@ -1,15 +1,15 @@
 {
-  "name": "小账本",
-  "short_name": "小账本",
-  "description": "简单好用的手机记账本，数据存在自己的服务器上。",
+  "name": "Loopy 小账本",
+  "short_name": "Loopy 账本",
+  "description": "可爱好用的手机记账本，数据存在自己的服务器上。",
   "lang": "zh-CN",
   "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#FFF7F5",
-  "theme_color": "#F2718C",
+  "background_color": "#fff5f8",
+  "theme_color": "#fff5f8",
   "icons": [
     {
       "src": "icons/icon-192.png",

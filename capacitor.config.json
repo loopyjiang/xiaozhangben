@@ -1,6 +1,6 @@
 {
   "appId": "com.xiaozhangben.ledger",
-  "appName": "小账本",
+  "appName": "Loopy 小账本",
   "webDir": "public",
   "server": {
     "androidScheme": "http",

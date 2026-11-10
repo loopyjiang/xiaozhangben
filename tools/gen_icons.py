@@ -1,11 +1,18 @@
-"""生成小账本 App 图标：粉色圆角底 + 白色 ¥ 符号。
+"""生成 App 图标：粉色渐变底 + Loopy 头部。
 
-纯几何绘制，不依赖系统字体 —— 在 Windows / Linux / macOS 上输出一致，
-所以 CI 里可以现场生成，仓库无需提交二进制图片。
+头部素材来自 tools/loopy-head.webp（由 tools/split_loopy.py 从精灵图裁出）。
+素材缺失时退回旧的「粉底 + 白色 ¥」图标，保证任何环境都能出图。
 """
-from PIL import Image, ImageDraw
+import os
+from PIL import Image, ImageDraw, ImageFilter
 
 SS = 4  # 超采样倍数，最后缩小以获得平滑边缘
+
+LOOPY_PINK_TOP = (255, 226, 238)
+LOOPY_PINK_BOTTOM = (243, 168, 197)
+
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+HEAD_PATH = os.path.join(ROOT, "tools", "loopy-head.webp")
 
 
 def gradient(size, top, bottom):
@@ -24,7 +31,7 @@ def rounded_mask(size, radius):
 
 
 def yen(size, scale=0.70):
-    """在透明图层中心画白色 ¥。"""
+    """旧的 ¥ 图标（素材缺失时兜底）。"""
     layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
 
@@ -38,29 +45,38 @@ def yen(size, scale=0.70):
     joint_y = cy - s * 0.02
     bottom_y = cy + s * 0.28
 
-    # 左侧斜线 + 竖线（一条折线，joint 让拐角圆滑）
     d.line([(cx - half, top_y), (cx, joint_y), (cx, bottom_y)], fill="white", width=w, joint="curve")
-    # 右侧斜线
     d.line([(cx + half, top_y), (cx, joint_y)], fill="white", width=w, joint="curve")
 
-    # 圆头收口
     for x, y in ((cx - half, top_y), (cx + half, top_y), (cx, bottom_y)):
         d.ellipse([x - r, y - r, x + r, y + r], fill="white")
 
-    # 两道横杠
     bar_half = s * 0.185
     for by in (cy + s * 0.035, cy + s * 0.135):
-        d.rounded_rectangle(
-            [cx - bar_half, by - r, cx + bar_half, by + r],
-            radius=r, fill="white",
-        )
+        d.rounded_rectangle([cx - bar_half, by - r, cx + bar_half, by + r], radius=r, fill="white")
 
     return layer
 
 
-def build(size, path, *, maskable=False, rounded=True):
+def loopy_head(size, scale):
+    """把头部素材等比缩放到 size*scale，并加一点柔和投影。"""
+    head = Image.open(HEAD_PATH).convert("RGBA")
+    side = int(size * scale)
+    head = head.resize((side, side), Image.LANCZOS)
+
+    shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    shadow.paste((176, 96, 126, 90), ((size - side) // 2, (size - side) // 2 + int(size * 0.02)), head)
+    shadow = shadow.filter(ImageFilter.GaussianBlur(size * 0.018))
+
+    layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    layer.alpha_composite(shadow)
+    layer.alpha_composite(head, ((size - side) // 2, (size - side) // 2))
+    return layer
+
+
+def build(size, path, *, maskable=False, rounded=True, head=True):
     big = size * SS
-    bg = gradient(big, (255, 154, 172), (232, 93, 124)).convert("RGBA")
+    bg = gradient(big, LOOPY_PINK_TOP, LOOPY_PINK_BOTTOM).convert("RGBA")
 
     if rounded:
         canvas = Image.new("RGBA", (big, big), (0, 0, 0, 0))
@@ -68,15 +84,18 @@ def build(size, path, *, maskable=False, rounded=True):
     else:
         canvas = bg
 
-    canvas.alpha_composite(yen(big, scale=0.56 if maskable else 0.70))
+    if head and os.path.exists(HEAD_PATH):
+        # 安卓自适应图标要留安全区，主体缩到 62%
+        canvas.alpha_composite(loopy_head(big, 0.62 if maskable else 0.77))
+    else:
+        canvas.alpha_composite(yen(big, scale=0.56 if maskable else 0.70))
+
     canvas.resize((size, size), Image.LANCZOS).save(path, "PNG", optimize=True)
     print("saved", path, size)
 
 
 if __name__ == "__main__":
-    import os
-    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-    out = os.path.join(root, "public", "icons")
+    out = os.path.join(ROOT, "public", "icons")
     os.makedirs(out, exist_ok=True)
     build(192, os.path.join(out, "icon-192.png"))
     build(512, os.path.join(out, "icon-512.png"))
@@ -84,7 +103,7 @@ if __name__ == "__main__":
     build(180, os.path.join(out, "apple-touch-icon.png"), rounded=False)
 
     # 原生启动图标素材（交给 @capacitor/assets 生成各尺寸）
-    assets = os.path.join(root, "assets")
+    assets = os.path.join(ROOT, "assets")
     os.makedirs(assets, exist_ok=True)
 
     # 整块图标：直角满幅，工具会自动按平台裁圆角
@@ -92,9 +111,12 @@ if __name__ == "__main__":
 
     # 自适应图标的前景与背景（安卓 8.0+）
     fg = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
-    fg.alpha_composite(yen(1024, scale=0.52))
+    if os.path.exists(HEAD_PATH):
+        fg.alpha_composite(loopy_head(1024, 0.56))
+    else:
+        fg.alpha_composite(yen(1024, scale=0.52))
     fg.save(os.path.join(assets, "icon-foreground.png"), "PNG", optimize=True)
 
-    bg = gradient(1024, (255, 154, 172), (232, 93, 124)).convert("RGBA")
+    bg = gradient(1024, LOOPY_PINK_TOP, LOOPY_PINK_BOTTOM).convert("RGBA")
     bg.save(os.path.join(assets, "icon-background.png"), "PNG", optimize=True)
     print("saved assets/icon-*.png 1024")

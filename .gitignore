@@ -4,8 +4,7 @@ data/
 *.log
 .DS_Store
 
-# 生成物（CI 与部署脚本会现场生成，避免往仓库塞二进制）
-public/icons/
+# 生成物（CI 会现场生成，避免往仓库塞二进制）
 assets/
 android/
 ios/

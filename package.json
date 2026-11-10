@@ -2,7 +2,7 @@
   "name": "ledger-app",
   "version": "1.0.0",
   "private": true,
-  "description": "小账本 - 手机记账 PWA + 自托管后端",
+  "description": "Loopy 小账本 - 手机记账 PWA + 自托管后端",
   "type": "module",
   "main": "server/index.js",
   "scripts": {

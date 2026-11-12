@@ -215,11 +215,29 @@ Key 只存在服务器上，前端拿不到，也不会进 git（`.env` 已忽�
 
 ## 日常维护
 
-**更新代码**（不改 nginx、不碰证书，最安全）：
+**更新代码**（不改 nginx、不碰证书、不改 `.env` 和数据，最安全）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/loopyjiang/xiaozhangben/main/deploy/update.sh -o /tmp/u.sh && sudo bash /tmp/u.sh
+curl -fsSL https://raw.githubusercontent.com/loopyjiang/xiaozhangben/main/deploy/update.sh -o /tmp/u.sh \
+  && sudo bash /tmp/u.sh
 ```
+
+脚本会依次尝试 git → GitHub 直连 → 三个镜像。国内机房通常连不上 `github.com`，直连只等 15 秒就会切镜像，别以为是卡死了。更新完成后会打印健康检查，并逐项确认 `public/` 下的 Loopy 素材、图标和 Service Worker 版本都在。
+
+如果网络全断，可以在能上网的电脑上生成快照，传上去再更新：
+
+```bash
+# 本地（仓库目录内）
+git archive --format=tar.gz -o ledger-main.tgz HEAD
+scp ledger-main.tgz 服务器:/tmp/ledger-main.tgz
+
+# 服务器上
+sudo env LOCAL_TARBALL=/tmp/ledger-main.tgz bash /tmp/u.sh
+```
+
+注意 `sudo` 会清空环境变量，`LOCAL_TARBALL` 必须写在 `sudo` 之后。快照里不含 `.env` 和 `data/`，覆盖不会丢配置或账目。
+
+> 线上服务器是**纯文件部署**（没有 `.git`），别用 `git status` 判断版本，看 `/sw.js` 里的 `ledger-shell-vN` 缓存号，或者 `/api/health`。
 
 **看状态和日志**：
 

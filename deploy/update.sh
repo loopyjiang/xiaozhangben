@@ -85,10 +85,23 @@ fi
 if [ "$UPDATED" = "0" ]; then
   for prefix in "" "${MIRRORS[@]}"; do
     url="${prefix}${TARBALL}"
-    if curl -fsSL --max-time 120 "$url" -o /tmp/ledger-update.tgz 2>/dev/null \
+    # 国内机房连 github.com 常常直接卡住，直连只给 15 秒，镜像给 60 秒
+    [ -z "$prefix" ] && LIMIT=15 || LIMIT=60
+    if curl -fsSL --max-time "$LIMIT" "$url" -o /tmp/ledger-update.tgz 2>/dev/null \
        && tar tzf /tmp/ledger-update.tgz >/dev/null 2>&1; then
-      tar xzf /tmp/ledger-update.tgz -C "$APP_DIR" --strip-components=1
+      # GitHub 的归档有顶层目录，剥一层；剥完必须能看到 public/sw.js
+      SW_MEMBER="$(tar tzf /tmp/ledger-update.tgz | grep -E '(^|/)public/sw\.js$' | head -1)"
+      if [ -z "$SW_MEMBER" ]; then
+        warn "压缩包结构异常（${prefix:-直连}），换下一个源"
+        rm -f /tmp/ledger-update.tgz
+        continue
+      fi
+      case "$SW_MEMBER" in
+        public/sw.js) tar xzf /tmp/ledger-update.tgz -C "$APP_DIR" ;;
+        *)            tar xzf /tmp/ledger-update.tgz -C "$APP_DIR" --strip-components=1 ;;
+      esac
       rm -f /tmp/ledger-update.tgz
+      [ -f "$APP_DIR/public/sw.js" ] || { echo "解压后找不到 public/sw.js，已停止"; exit 1; }
       ok "已更新（压缩包 ${prefix:-直连}）"
       UPDATED=1
       break

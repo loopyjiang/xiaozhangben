@@ -117,6 +117,12 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
 }
 
+/* 桌宠在场时让她说，别再弹一个 toast 挤在一起 */
+function notifyHappy(msg) {
+  if (pet.on && !chatState.open && state.view !== 'settings') petSay(msg, 3000);
+  else toast(msg);
+}
+
 /* ================= 登录 ================= */
 
 function clearSession() {
@@ -125,6 +131,12 @@ function clearSession() {
   state.analysis = null;
   state.aiConfig = null;
   localStorage.removeItem(TOKEN_KEY);
+  /* 换个账号登录时别看到上一个人的聊天记录 */
+  try {
+    chatState.messages = [];
+    chatState.greeted = false;
+    chatState.busy = false;
+  } catch { /* 页面还没初始化完 */ }
 }
 
 /* 备案号由服务端下发，绑域名对外访问时按工信部要求必须展示 */
@@ -165,6 +177,7 @@ function showApp() {
   $('offlineBar').hidden = !state.offline;
   loadIcp();
   renderAll();
+  initPet();
 }
 
 let authMode = 'login';
@@ -449,6 +462,7 @@ function renderSettings() {
   $('aiConfigToggle').textContent = $('aiConfigBox').hidden
     ? (ai.source === 'user' ? '改我的接口' : '用自己的接口')
     : '收起';
+  $('petToggle').setAttribute('aria-checked', String(pet.on));
 }
 
 /* Loopy 的分析结果，换月份就作废，不串月份 */
@@ -503,6 +517,7 @@ function switchView(view) {
   $('fabAdd').hidden = view === 'settings';
   /* 我的页面不按月看，把月份切换收起来 */
   document.querySelector('.month-switch').hidden = view === 'settings';
+  syncPetVisible();
   window.scrollTo({ top: 0 });
 }
 
@@ -582,7 +597,8 @@ async function saveRecord() {
     state.month = { y, m };
     closeSheet();
     renderAll();
-    toast(`${rec.type === 'income' ? '收入' : '支出'} ¥${money(rec.amount)} 已记上`);
+    setPetMood('cheer', 1500);
+    notifyHappy(`记好啦，${rec.type === 'income' ? '收入' : '花了'} ¥${money(rec.amount)}`);
   } catch (err) {
     toast(err.message);
   } finally {
@@ -613,9 +629,10 @@ async function askAI(e) {
     input.value = '';
     renderAll();
     const first = list[0];
-    toast(list.length === 1
-      ? `已记账：${first.category} ¥${money(first.amount)}`
-      : `已记账 ${list.length} 笔`);
+    setPetMood('cheer', 1500);
+    notifyHappy(list.length === 1
+      ? `记好啦，${first.category} ¥${money(first.amount)}`
+      : `一下记了 ${list.length} 笔～`);
   } catch (err) {
     toast(err.message);
   } finally {
@@ -634,11 +651,14 @@ async function askAnalyze() {
   }
   btn.disabled = true;
   btn.textContent = 'Loopy 在翻账本…';
+  setPetMood('think', 15000);
   try {
     const data = await api('/api/ai/analyze', { method: 'POST', body: { month: monthKey() } });
     state.analysis = data;
+    setPetMood('happy', 2200);
   } catch (err) {
     toast(err.message);
+    setPetMood('idle', 10);
   } finally {
     btn.disabled = false;
     renderAnalysis();
@@ -749,7 +769,440 @@ async function clearAi() {
   }
 }
 
+/* ================= 桌宠 ================= */
+
+const PET_KEY = 'ledger.pet.v1';
+const PET_FRAMES = {
+  idle: 'loopy/01-smile.webp',
+  blink: 'loopy/blink.webp',
+  happy: 'loopy/happy.webp',
+  think: 'loopy/08-study.webp',
+  cheer: 'loopy/06-music.webp',
+  coin: 'loopy/09-gift.webp',
+};
+
+const pet = {
+  on: true,
+  frame: 'idle',
+  mood: '',
+  left: null,
+  bottom: null,
+  blinkTimer: 0,
+  moodTimer: 0,
+  sayTimer: 0,
+  idleTimer: 0,
+};
+
+function loadPetPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PET_KEY) || '{}');
+    if (typeof saved.on === 'boolean') pet.on = saved.on;
+    if (Number.isFinite(saved.left)) pet.left = saved.left;
+    if (Number.isFinite(saved.bottom)) pet.bottom = saved.bottom;
+  } catch { /* 配置坏了就用默认 */ }
+}
+
+function savePetPrefs() {
+  try {
+    localStorage.setItem(PET_KEY, JSON.stringify({ on: pet.on, left: pet.left, bottom: pet.bottom }));
+  } catch { /* 存不下就算了 */ }
+}
+
+function petEl() { return $('pet'); }
+
+function petBottomLimit() {
+  const bar = document.querySelector('.tabbar');
+  return (bar?.offsetHeight || 62) + 6 + (window.visualViewport?.offsetTop || 0);
+}
+
+function clampPet(left, bottom) {
+  const el = petEl();
+  const w = el.offsetWidth || 88;
+  const h = el.offsetHeight || 88;
+  return {
+    left: Math.min(Math.max(left, 4), Math.max(4, window.innerWidth - w - 4)),
+    bottom: Math.min(Math.max(bottom, petBottomLimit()), Math.max(80, window.innerHeight - h - 10)),
+  };
+}
+
+function applyPetRect(left, bottom) {
+  const el = petEl();
+  const pos = clampPet(left, bottom);
+  pet.left = Math.round(pos.left);
+  pet.bottom = Math.round(pos.bottom);
+  el.style.left = `${pet.left}px`;
+  el.style.bottom = `${pet.bottom}px`;
+  el.classList.toggle('bubble-right', pet.left + el.offsetWidth / 2 > window.innerWidth / 2);
+}
+
+function syncPetVisible() {
+  const el = petEl();
+  if (!el) return;
+  el.hidden = false;
+  el.classList.toggle('gone', !pet.on || chatState.open || state.view === 'settings');
+}
+
+function applyPetVisibility() {
+  const el = petEl();
+  if (!el) return;
+  el.hidden = false;
+  syncPetVisible();
+  if (pet.on) applyPetRect(pet.left ?? 12, pet.bottom ?? (petBottomLimit() + 8));
+  $('petToggle').setAttribute('aria-checked', String(pet.on));
+}
+
+function petFrame(name) {
+  if (pet.frame === name) return;
+  pet.frame = name;
+  $('petImg').src = PET_FRAMES[name] || PET_FRAMES.idle;
+}
+
+function setPetMood(name, ms = 1700) {
+  clearTimeout(pet.moodTimer);
+  pet.mood = name;
+  petFrame(name);
+  pet.moodTimer = setTimeout(() => {
+    pet.mood = '';
+    petFrame('idle');
+  }, ms);
+}
+
+function petSay(text, ms = 4400) {
+  if (!pet.on || chatState.open || !text) return;
+  const el = $('petBubble');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(pet.sayTimer);
+  pet.sayTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function petAnim(cls) {
+  const el = petEl();
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), 800);
+}
+
+function petHop() { if (pet.on) petAnim('hop'); }
+
+function scheduleBlink() {
+  clearTimeout(pet.blinkTimer);
+  pet.blinkTimer = setTimeout(() => {
+    if (pet.on && !pet.mood && !chatState.open && !document.hidden) {
+      petFrame('blink');
+      setTimeout(() => {
+        if (!pet.mood && pet.frame === 'blink') petFrame('idle');
+      }, 135);
+    }
+    scheduleBlink();
+  }, 2200 + Math.random() * 3600);
+}
+
+/* 闲着的时候偶尔蹦一下、扭一下，看着像活的 */
+function scheduleIdleAction() {
+  clearTimeout(pet.idleTimer);
+  pet.idleTimer = setTimeout(() => {
+    if (pet.on && !pet.mood && !chatState.open && !document.hidden) {
+      if (Math.random() < 0.55) petHop();
+      else petAnim('wiggle');
+    }
+    scheduleIdleAction();
+  }, 7000 + Math.random() * 8000);
+}
+
+/* 一天只打一次招呼，别烦人 */
+function petGreet() {
+  if (!pet.on) return;
+  const key = 'ledger.pet.hello';
+  if (localStorage.getItem(key) === todayStr()) return;
+  localStorage.setItem(key, todayStr());
+
+  let line;
+  if (!state.ai?.enabled) {
+    line = '我的 AI 还没接上，去「我的」里配一下就能聊天啦';
+  } else {
+    const today = state.records.filter((r) => r.date === todayStr());
+    const list = monthRecords().filter((r) => r.type !== 'income');
+    const total = list.reduce((s, r) => s + Number(r.amount), 0);
+    if (!today.length) line = '今天还没记账呢，点我说一句就行～';
+    else if (total > 0 && total > 3000) line = '这个月花得有点猛，要不要我帮你看看？';
+    else line = '我在～想聊账本的事就点我';
+  }
+
+  setTimeout(() => {
+    petSay(line, 5200);
+    petAnim('wiggle');
+  }, 1300);
+}
+
+function initPet() {
+  loadPetPrefs();
+  Object.values(PET_FRAMES).forEach((src) => { const im = new Image(); im.src = src; });
+  applyPetVisibility();
+  scheduleBlink();
+  scheduleIdleAction();
+  petGreet();
+}
+
+/* 拖动换位置，轻点一下就是聊天 */
+let petDrag = null;
+
+function bindPet() {
+  const btn = $('petBtn');
+
+  btn.addEventListener('pointerdown', (e) => {
+    if (!pet.on || e.button !== 0) return;
+    const rect = petEl().getBoundingClientRect();
+    petDrag = {
+      id: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      left: rect.left,
+      bottom: window.innerHeight - rect.bottom,
+      moved: false,
+    };
+    petEl().classList.add('dragging');
+    try { btn.setPointerCapture(e.pointerId); } catch { /* 某些浏览器不支持 */ }
+  });
+
+  btn.addEventListener('pointermove', (e) => {
+    if (!petDrag || e.pointerId !== petDrag.id) return;
+    const dx = e.clientX - petDrag.x;
+    const dy = e.clientY - petDrag.y;
+    if (!petDrag.moved && Math.hypot(dx, dy) < 7) return;
+    petDrag.moved = true;
+    $('petBubble').classList.remove('show');
+    applyPetRect(petDrag.left + dx, petDrag.bottom - dy);
+  });
+
+  const endDrag = (e) => {
+    if (!petDrag || (e && e.pointerId !== petDrag.id)) return;
+    const moved = petDrag.moved;
+    petDrag = null;
+    petEl().classList.remove('dragging');
+    if (moved) savePetPrefs();
+    else openChat();
+  };
+
+  btn.addEventListener('pointerup', endDrag);
+  btn.addEventListener('pointercancel', () => {
+    petDrag = null;
+    petEl().classList.remove('dragging');
+  });
+
+  btn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openChat();
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    if (pet.left != null) applyPetRect(pet.left, pet.bottom);
+  });
+
+  let scrollTimer = 0;
+  window.addEventListener('scroll', () => {
+    if (!pet.on) return;
+    petEl().classList.add('peek');
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => petEl().classList.remove('peek'), 780);
+  }, { passive: true });
+
+  $('petToggle').addEventListener('click', () => {
+    pet.on = !pet.on;
+    savePetPrefs();
+    applyPetVisibility();
+    if (!pet.on) {
+      $('petBubble').classList.remove('show');
+      if (chatState.open) closeChat();
+      toast('Loopy 先躲起来了');
+    } else {
+      toast('Loopy 出来啦');
+      petAnim('wiggle');
+    }
+  });
+}
+
+/* ================= 和 Loopy 聊天 ================= */
+
+const chatState = { open: false, messages: [], busy: false, greeted: false };
+
+const CHAT_CHIPS = ['这个月花了多少', '哪类花得最多', '帮我记：午饭 28', '怎么省一点'];
+
+function chatMsgHtml(m) {
+  if (m.role === 'me') {
+    return `<div class="msg me"><div class="msg-bubble">${escapeHtml(m.content)}</div></div>`;
+  }
+  return `<div class="msg">
+    <img class="msg-ava" src="loopy/avatar.webp" alt="">
+    <div class="msg-bubble">${escapeHtml(m.content)}${m.note ? `<div class="msg-note">${escapeHtml(m.note)}</div>` : ''}</div>
+  </div>`;
+}
+
+function renderChat() {
+  const body = $('chatBody');
+  const typing = chatState.busy
+    ? `<div class="msg typing"><img class="msg-ava" src="loopy/avatar.webp" alt=""><div class="msg-bubble"><i></i><i></i><i></i></div></div>`
+    : '';
+  body.innerHTML = chatState.messages.map(chatMsgHtml).join('') + typing;
+  body.scrollTop = body.scrollHeight;
+}
+
+function renderChatChips() {
+  if (!state.ai?.enabled) {
+    $('chatChips').innerHTML = '<button class="chip" type="button" data-go="settings">去配置 AI</button>';
+    return;
+  }
+  $('chatChips').innerHTML = CHAT_CHIPS
+    .map((t) => `<button class="chip" type="button" data-q="${escapeHtml(t)}">${escapeHtml(t)}</button>`)
+    .join('');
+}
+
+function openChat() {
+  if (chatState.open) return;
+  chatState.open = true;
+  $('petBubble').classList.remove('show');
+  syncPetVisible();
+
+  $('chatSheet').classList.add('open');
+  $('chatSheet').setAttribute('aria-hidden', 'false');
+  $('chatMask').classList.add('show');
+
+  if (!chatState.greeted) {
+    chatState.greeted = true;
+    if (!state.ai?.enabled) {
+      chatState.messages.push({
+        role: 'loopy',
+        content: '我的 AI 还没接上呢。去「我的 → AI 记账」填一个接口，我就能陪你看账、帮你记账了。',
+      });
+      $('chatStatus').textContent = '还没接上 AI';
+    } else {
+      chatState.messages.push({
+        role: 'loopy',
+        content: '我在～账本的事都能问我，也可以说「午饭 28」让我直接记上。',
+      });
+      $('chatStatus').textContent = '问我账本的事，也可以让我记一笔';
+    }
+  }
+
+  renderChatChips();
+  $('chatChips').hidden = false;
+
+  const ready = Boolean(state.ai?.enabled);
+  $('chatInput').disabled = !ready;
+  $('chatSend').disabled = !ready;
+  $('chatInput').placeholder = ready ? '跟 Loopy 说点什么…' : '先接上 AI 才能聊天';
+
+  renderChat();
+}
+
+function closeChat() {
+  if (!chatState.open) return;
+  chatState.open = false;
+  $('chatSheet').classList.remove('open');
+  $('chatSheet').setAttribute('aria-hidden', 'true');
+  $('chatMask').classList.remove('show');
+  $('chatInput').blur();
+  syncPetVisible();
+}
+
+async function sendChat(text) {
+  const content = String(text || '').trim();
+  if (!content || chatState.busy) return;
+
+  if (!state.ai?.enabled) {
+    chatState.messages.push({ role: 'loopy', content: '得先接上 AI 才能聊。点下面的「去配置」，一分钟就能弄好。' });
+    renderChat();
+    return;
+  }
+
+  chatState.messages.push({ role: 'me', content });
+  $('chatInput').value = '';
+  chatState.busy = true;
+  renderChat();
+  $('chatSend').disabled = true;
+
+  const history = chatState.messages
+    .filter((m) => m.role === 'me' || m.role === 'loopy')
+    .map((m) => ({ role: m.role === 'me' ? 'user' : 'assistant', content: m.content }))
+    .slice(-10);
+
+  try {
+    const data = await api('/api/ai/chat', {
+      method: 'POST',
+      body: { month: monthKey(), today: todayStr(), messages: history },
+    });
+
+    let note = '';
+    if (data.records?.length) {
+      note = `已记账：${data.records.map((r) => `${r.category} ¥${money(r.amount)}`).join('、')}`;
+      state.records.unshift(...data.records);
+      writeCache();
+      renderAll();
+    }
+
+    chatState.messages.push({ role: 'loopy', content: data.reply || '嗯…我没想好说什么', note });
+  } catch (err) {
+    chatState.messages.push({ role: 'loopy', content: err.message || '我这会儿有点糊涂，再说一次？' });
+  } finally {
+    chatState.busy = false;
+    renderChat();
+    $('chatSend').disabled = false;
+    $('chatInput').focus();
+  }
+}
+
+function bindChat() {
+  $('chatMask').addEventListener('click', closeChat);
+  $('chatClose').addEventListener('click', closeChat);
+
+  /* 键盘弹起来时把面板顶上去，别把输入框盖住 */
+  if (window.visualViewport) {
+    const syncKeyboardInset = () => {
+      const vv = window.visualViewport;
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty('--kb', `${Math.round(kb)}px`);
+      if (chatState.open) {
+        const body = $('chatBody');
+        body.scrollTop = body.scrollHeight;
+      }
+    };
+    window.visualViewport.addEventListener('resize', syncKeyboardInset);
+    window.visualViewport.addEventListener('scroll', syncKeyboardInset);
+  }
+
+  $('chatInput').addEventListener('focus', () => {
+    setTimeout(() => {
+      const body = $('chatBody');
+      body.scrollTop = body.scrollHeight;
+    }, 300);
+  });
+
+  $('chatForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    sendChat($('chatInput').value);
+  });
+
+  $('chatChips').addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    if (chip.dataset.go) {
+      closeChat();
+      switchView(chip.dataset.go);
+      return;
+    }
+    sendChat(chip.dataset.q);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && chatState.open) closeChat();
+  });
+}
+
 /* ================= 备份 ================= */
+
 
 async function exportBackup() {
   try {
@@ -824,6 +1277,7 @@ async function boot() {
       $('appRoot').hidden = false;
       $('authScreen').hidden = true;
       renderAll();
+      initPet();
     } else {
       showAuth(err.message);
     }
@@ -910,6 +1364,9 @@ function bind() {
   $('aiTestBtn').addEventListener('click', testAi);
   $('aiSaveBtn').addEventListener('click', saveAi);
   $('aiClearBtn').addEventListener('click', clearAi);
+  $('chatOpenBtn').addEventListener('click', openChat);
+  bindPet();
+  bindChat();
 
   $('exportBtn').addEventListener('click', exportBackup);
   $('importBtn').addEventListener('click', () => $('importFile').click());

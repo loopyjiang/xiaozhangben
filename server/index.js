@@ -9,7 +9,7 @@ import {
   userFromToken, publicUser,
 } from './auth.js';
 import {
-  parseRecords, analyzeMonth, testAiConfig,
+  parseRecords, analyzeMonth, chatWithLoopy, testAiConfig,
   aiEnabled, aiInfo, aiStatusFor, configFor, EXPENSE_CATS, INCOME_CATS,
 } from './ai.js';
 import { encryptSecret, decryptSecret, maskSecret } from './secret.js';
@@ -321,6 +321,97 @@ app.post('/api/ai/analyze', auth, async (req, res, next) => {
         avg: summary.avg,
       },
     });
+  } catch (e) { next(e); }
+});
+
+/* ---------- 桌宠聊天 ---------- */
+const chatHits = new Map();
+function chatRateLimited(userId) {
+  const now = Date.now();
+  const recent = (chatHits.get(userId) || []).filter((t) => now - t < 60 * 60 * 1000);
+  if (recent.length >= 60) {
+    chatHits.set(userId, recent);
+    return true;
+  }
+  recent.push(now);
+  chatHits.set(userId, recent);
+  return false;
+}
+
+/* 聊天只带统计和最近几笔，不把整本流水都发出去 */
+function buildChatContext(userId, summary, today) {
+  const lines = [
+    `正在看的月份：${summary.month}`,
+    `本月支出 ${summary.expense.toFixed(2)} 元，收入 ${summary.income.toFixed(2)} 元，共 ${summary.count} 笔`,
+    `有支出的天数 ${summary.activeDays} 天，日均支出 ${summary.avg.toFixed(2)} 元`,
+  ];
+
+  if (summary.cats.length) {
+    lines.push(`支出分类：${summary.cats.map((c) => `${c.name} ${c.amount.toFixed(0)}元(${c.share.toFixed(0)}%)`).join('、')}`);
+  }
+  if (summary.top.length) {
+    lines.push(`最大的几笔：${summary.top.map((r) => `${r.category} ${r.amount.toFixed(0)}元${r.note ? `(${r.note})` : ''}`).join('、')}`);
+  }
+  if (summary.prevExpense > 0) {
+    const diff = ((summary.expense - summary.prevExpense) / summary.prevExpense) * 100;
+    lines.push(`上月支出 ${summary.prevExpense.toFixed(2)} 元，本月${diff >= 0 ? '多了' : '少了'} ${Math.abs(diff).toFixed(0)}%`);
+  } else {
+    lines.push('上月没有支出记录，没法比较');
+  }
+
+  const fmt = (r) => `${r.type === 'income' ? '收入' : '支出'} ${r.category} ${Number(r.amount).toFixed(2)}元${r.note ? `(${r.note})` : ''}`;
+  const todayList = store.records.filter((r) => r.userId === userId && r.date === today);
+  lines.push(todayList.length
+    ? `今天（${today}）：${todayList.map(fmt).join('；')}`
+    : `今天（${today}）还没有记账`);
+
+  const recent = store.records
+    .filter((r) => r.userId === userId)
+    .sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date)))
+    .slice(0, 12);
+  if (recent.length) lines.push(`最近 12 笔：${recent.map((r) => `${r.date} ${fmt(r)}`).join('；')}`);
+
+  return lines.join('\n');
+}
+
+app.post('/api/ai/chat', auth, async (req, res, next) => {
+  try {
+    if (!aiStatusFor(req.user).enabled) {
+      throw fail(503, '还没接上 AI，去「我的 → AI 记账」填一个接口');
+    }
+
+    const messages = (Array.isArray(req.body?.messages) ? req.body.messages : [])
+      .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .slice(-10)
+      .map((m) => ({ role: m.role, content: m.content.trim().slice(0, 400) }))
+      .filter((m) => m.content);
+
+    if (!messages.length || messages[messages.length - 1].role !== 'user') throw fail(400, '说点什么吧');
+    if (chatRateLimited(req.user.id)) throw fail(429, '聊得有点快，歇一会儿再说');
+
+    const rawMonth = String(req.body?.month || '');
+    const month = /^\d{4}-\d{2}$/.test(rawMonth) ? rawMonth : new Date().toISOString().slice(0, 7);
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.today))
+      ? req.body.today
+      : new Date().toISOString().slice(0, 10);
+
+    const summary = buildMonthSummary(req.user.id, month);
+    const context = buildChatContext(req.user.id, summary, today);
+    const result = await chatWithLoopy({ messages, context, user: req.user, today });
+
+    const created = result.records.map((d) => {
+      const record = {
+        id: crypto.randomUUID(),
+        userId: req.user.id,
+        ...sanitizeRecord(d),
+        createdAt: new Date().toISOString(),
+      };
+      store.records.push(record);
+      return record;
+    });
+    if (created.length) store.save();
+
+    res.json({ ok: true, reply: result.reply, records: created });
   } catch (e) { next(e); }
 });
 

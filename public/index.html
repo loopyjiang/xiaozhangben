@@ -150,6 +150,7 @@
         <p class="desc" id="aiStatus">检查中…</p>
         <div class="row-btns">
           <button class="btn ghost" id="aiConfigToggle">用自己的接口</button>
+          <button class="btn ghost" id="chatOpenBtn">找 Loopy 聊聊</button>
         </div>
 
         <div class="ai-config" id="aiConfigBox" hidden>
@@ -191,8 +192,20 @@
         <button class="btn ghost full" id="installBtn" hidden>立即安装</button>
       </div>
 
+      <div class="card">
+        <div class="card-row">
+          <div class="card-row-text">
+            <h3>桌面宠物</h3>
+            <p class="desc">Loopy 蹲在屏幕角落，点她就能聊两句，按住可以拖到别处。</p>
+          </div>
+          <button class="switch" id="petToggle" type="button" role="switch" aria-checked="true" aria-label="桌面宠物">
+            <i></i>
+          </button>
+        </div>
+      </div>
+
       <button class="btn ghost danger full" id="logoutBtn">退出登录</button>
-      <p class="version">Loopy 小账本 v1.2 · 自托管</p>
+      <p class="version">Loopy 小账本 v1.3 · 自托管</p>
       <a class="icp" id="icpSettings" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" hidden></a>
     </section>
 
@@ -214,6 +227,15 @@
   </nav>
 
   <button class="fab" id="fabAdd" aria-label="记一笔">+</button>
+
+  <!-- 桌宠：点她聊天，可以拖着换位置 -->
+  <div class="pet" id="pet" hidden>
+    <div class="pet-bubble" id="petBubble" role="status" aria-live="polite"></div>
+    <button class="pet-hit" id="petBtn" type="button" aria-label="和 Loopy 聊两句">
+      <span class="pet-shadow"></span>
+      <img class="pet-img" id="petImg" src="loopy/01-smile.webp" alt="" width="88" height="88" draggable="false">
+    </button>
+  </div>
 </div>
 
 <div class="sheet-mask" id="sheetMask"></div>
@@ -256,6 +278,26 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- 和 Loopy 聊天 -->
+<div class="chat-mask" id="chatMask"></div>
+<section class="chat" id="chatSheet" aria-hidden="true" aria-label="和 Loopy 聊天">
+  <div class="chat-head">
+    <img class="chat-face" src="loopy/avatar.webp" alt="" width="38" height="38">
+    <div class="chat-who">
+      <b>Loopy</b>
+      <span id="chatStatus">问我账本的事，也可以让我记一笔</span>
+    </div>
+    <button class="chat-close" id="chatClose" type="button" aria-label="收起">收起</button>
+  </div>
+  <div class="chat-body" id="chatBody"></div>
+  <div class="chat-chips" id="chatChips"></div>
+  <form class="chat-form" id="chatForm" autocomplete="off">
+    <input class="chat-input" id="chatInput" type="text" placeholder="跟 Loopy 说点什么…" maxlength="200"
+           autocomplete="off" enterkeyhint="send">
+    <button class="chat-send" id="chatSend" type="submit">发送</button>
+  </form>
+</section>
 
 <script src="app.js"></script>
 </body>

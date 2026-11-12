@@ -1,4 +1,4 @@
-const CACHE = 'ledger-shell-v5';
+const CACHE = 'ledger-shell-v6';
 const SHELL = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const SHELL = [
   './icons/icon-192.png',
   './icons/apple-touch-icon.png',
   './loopy/avatar.webp',
+  './loopy/01-smile.webp',
   './loopy/hero.webp',
   './loopy/02-eat.webp',
   './loopy/03-car.webp',
@@ -17,6 +18,8 @@ const SHELL = [
   './loopy/07-flower.webp',
   './loopy/08-study.webp',
   './loopy/09-gift.webp',
+  './loopy/blink.webp',
+  './loopy/happy.webp',
 ];
 
 self.addEventListener('install', (event) => {

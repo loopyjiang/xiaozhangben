@@ -6,14 +6,16 @@
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/login.webp" width="200" /></td>
-    <td><img src="docs/screenshots/home.webp" width="200" /></td>
-    <td><img src="docs/screenshots/stats.webp" width="200" /></td>
-    <td><img src="docs/screenshots/add.webp" width="200" /></td>
+    <td><img src="docs/screenshots/login.webp" width="190" /></td>
+    <td><img src="docs/screenshots/home.webp" width="190" /></td>
+    <td><img src="docs/screenshots/chat.webp" width="190" /></td>
+    <td><img src="docs/screenshots/stats.webp" width="190" /></td>
+    <td><img src="docs/screenshots/add.webp" width="190" /></td>
   </tr>
   <tr align="center">
     <td><sub>登录</sub></td>
     <td><sub>明细 + 一句话记账</sub></td>
+    <td><sub>和 Loopy 聊天</sub></td>
     <td><sub>月度统计</sub></td>
     <td><sub>记账面板</sub></td>
   </tr>
@@ -29,6 +31,7 @@
 | 功能 | 说明 |
 |---|---|
 | 一句话记账 | 输入「午饭 28，打车 15」自动拆成两笔，日期、分类、备注都填好 |
+| 桌宠聊天 | 屏幕角落有只会眨眼、蹦跶的 Loopy，点她就能聊；顺口说「打车 32」也能直接记账 |
 | AI 看账 | 统计页让 Loopy 读一遍当月数据，给两三条具体观察和一条建议 |
 | 手动记账 | 自定义数字键盘，单手可操作，比系统输入法快 |
 | 月度统计 | 支出构成、分类占比、近 6 个月趋势 |
@@ -223,6 +226,22 @@ AI_MODEL=deepseek-chat
 
 服务器端的 Key 仍然只存在 `.env`（已进 `.gitignore`），不会打包进前端，也不会进 git。
 
+### 和 Loopy 聊天（桌宠）
+
+角落里那只 Loopy 是活的：会自己眨眼、悬空浮着、偶尔蹦一下。点她一下（或者「我的 → 找 Loopy 聊聊」）打开聊天面板，可以问账本的事，也可以直接说「打车 32，奶茶 13.5」让她记上。
+
+几个边界都收好了：
+
+- 回答只依据**当月统计 + 最近 12 笔**，账本里没有的会直说「账本里没有」，不会编数字。
+- 一句话里有多笔会一起记，记完立刻出现在明细里，并回一句确认。
+- 上下文最多带最近 10 轮；单账号每小时最多 60 条，防止误触把额度刷光。
+- 桌宠可以按住拖到别处，位置记在手机本地；翻页滚动时她会自动半透明，不挡数字。
+- 不想看到就在「我的 → 桌面宠物」关掉，聊天入口还留在 AI 卡片里。
+- 聊天里不会提接口、模型、Key 这类技术细节。
+
+接口是 `POST /api/ai/chat`，入参 `{ month, today, messages }`，返回 `{ reply, records }`；
+`records` 非空时后端已经落库，前端直接插进列表。
+
 ---
 
 ## 日常维护
@@ -290,7 +309,7 @@ ledger-app/
 │   ├── index.js           Express 路由：鉴权、账目、AI、导入导出
 │   ├── auth.js            scrypt 密码哈希 + token 会话
 │   ├── store.js           JSON 存储，原子写入 + 防抖落盘
-│   ├── ai.js              AI 解析与分析，供应商无关（通义 / DeepSeek / 任意兼容接口）
+│   ├── ai.js              AI 解析、月度分析、桌宠聊天，供应商无关（通义 / DeepSeek / 任意兼容接口）
 │   ├── secret.js          用户自带 Key 的 AES-256-GCM 加解密
 │   └── env.js             轻量 .env 解析
 ├── public/                前端（无框架，纯原生 JS）
@@ -300,7 +319,7 @@ ledger-app/
 │   ├── manifest.webmanifest
 │   ├── sw.js              Service Worker 离线缓存
 │   ├── icons/             PWA / 主屏图标
-│   └── loopy/             九种 Loopy 表情（分类图标、头像、登录页主图）
+│   └── loopy/             九种 Loopy 表情 + 眨眼/开心两帧（分类图标、桌宠、头像、登录页主图）
 ├── deploy/
 │   ├── install.sh         一键部署
 │   ├── update.sh          只更新代码
@@ -310,6 +329,7 @@ ledger-app/
 ├── tools/
 │   ├── gen_icons.py       粉底 + Loopy 头生成全套图标，素材缺失时退回 ¥ 图标
 │   ├── split_loopy.py     把 3×3 精灵图拆成单帧 / 头像 / 高清主图
+│   ├── gen_pet.py         给桌宠画眨眼和开心两帧（补眼 + 贝塞尔笑眼）
 │   └── shot.mjs           CDP 手机视口截图，用于自查界面
 └── .github/workflows/
     └── build.yml          云端构建安卓 APK / iOS 未签名包

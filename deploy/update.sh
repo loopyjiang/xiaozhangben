@@ -53,8 +53,23 @@ UPDATED=0
 if [ -n "$LOCAL_TARBALL" ]; then
   [ -f "$LOCAL_TARBALL" ] || { echo "找不到快照 $LOCAL_TARBALL"; exit 1; }
   tar tzf "$LOCAL_TARBALL" >/dev/null 2>&1 || { echo "快照不是有效的 tar.gz"; exit 1; }
-  tar xzf "$LOCAL_TARBALL" -C "$APP_DIR" --strip-components=1
-  ok "已更新（本地快照）"
+  # GitHub 的 main.tar.gz 有顶层目录（xiaozhangben-main/），需要剥一层；
+  # 开发机 git archive 出来的快照没有顶层目录，剥了会把 public/ 写散到根目录。
+  SW_MEMBER="$(tar tzf "$LOCAL_TARBALL" | grep -E '(^|/)public/sw\.js$' | head -1)"
+  if [ -z "$SW_MEMBER" ]; then
+    echo "快照里找不到 public/sw.js，已停止"; exit 1
+  fi
+  case "$SW_MEMBER" in
+    public/sw.js) tar xzf "$LOCAL_TARBALL" -C "$APP_DIR" ;;
+    *)            tar xzf "$LOCAL_TARBALL" -C "$APP_DIR" --strip-components=1 ;;
+  esac
+  # 硬校验：归档里的 sw.js 版本必须与落盘的一致，路径错位立刻失败
+  WANT_SW="$(tar xzf "$LOCAL_TARBALL" -O "$SW_MEMBER" | grep -oE 'ledger-shell-v[0-9]+' | head -1)"
+  GOT_SW="$(grep -oE 'ledger-shell-v[0-9]+' "$APP_DIR/public/sw.js" | head -1 || true)"
+  if [ "$WANT_SW" != "$GOT_SW" ]; then
+    echo "前端资源路径错位（期望 $WANT_SW，实际 ${GOT_SW:-未读到}），已停止"; exit 1
+  fi
+  ok "已更新（本地快照，$WANT_SW）"
   UPDATED=1
 elif [ -d .git ] && git rev-parse --verify HEAD >/dev/null 2>&1; then
   # .git 属主常是服务账号，root 执行需显式声明 safe.directory

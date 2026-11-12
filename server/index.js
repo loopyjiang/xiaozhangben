@@ -8,7 +8,11 @@ import {
   hashPassword, verifyPassword, createSession, destroySession,
   userFromToken, publicUser,
 } from './auth.js';
-import { parseRecords, aiEnabled, aiInfo, EXPENSE_CATS, INCOME_CATS } from './ai.js';
+import {
+  parseRecords, analyzeMonth, testAiConfig,
+  aiEnabled, aiInfo, aiStatusFor, configFor, EXPENSE_CATS, INCOME_CATS,
+} from './ai.js';
+import { encryptSecret, decryptSecret, maskSecret } from './secret.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -123,7 +127,8 @@ app.post('/api/auth/logout', auth, (req, res) => {
 });
 
 app.get('/api/me', auth, (req, res) => {
-  res.json({ user: publicUser(req.user), aiEnabled: aiEnabled() });
+  const ai = aiStatusFor(req.user);
+  res.json({ user: publicUser(req.user), aiEnabled: ai.enabled, ai });
 });
 
 /* ---------- 账目 ---------- */
@@ -178,7 +183,7 @@ app.post('/api/ai', auth, async (req, res, next) => {
     if (!text) throw fail(400, '说点什么吧');
     if (text.length > 200) throw fail(400, '太长啦，一句一句来');
 
-    const drafts = await parseRecords(text, `用户时区偏移 ${-new Date().getTimezoneOffset()} 分钟。`);
+    const drafts = await parseRecords(text, `用户时区偏移 ${-new Date().getTimezoneOffset()} 分钟。`, req.user);
     const created = drafts.map((d) => {
       const record = {
         id: crypto.randomUUID(),
@@ -191,6 +196,131 @@ app.post('/api/ai', auth, async (req, res, next) => {
     });
     if (created.length) store.save();
     res.json({ records: created, drafts });
+  } catch (e) { next(e); }
+});
+
+/* ---------- 每人自己的 AI 接口 ---------- */
+app.get('/api/ai/config', auth, (req, res) => {
+  const status = aiStatusFor(req.user);
+  const saved = req.user.aiConfig;
+  const key = saved?.key ? decryptSecret(saved.key) : '';
+  const fallback = configFor(null);
+  res.json({
+    serverDefault: aiEnabled(),
+    enabled: status.enabled,
+    source: status.source,
+    model: status.model,
+    /* 只给地址和模型名当占位参考，不含任何 Key */
+    suggest: { base: fallback.base, model: fallback.model },
+    custom: key ? { base: saved.base, model: saved.model, hint: maskSecret(key) } : null,
+  });
+});
+
+app.put('/api/ai/config', auth, (req, res) => {
+  const base = String(req.body?.base || '').trim().replace(/\/+$/, '');
+  const model = String(req.body?.model || '').trim();
+  const key = String(req.body?.key || '').trim();
+
+  if (!/^https?:\/\/\S+$/i.test(base)) return res.status(400).json({ error: '接口地址要以 http:// 或 https:// 开头' });
+  if (base.length > 300) return res.status(400).json({ error: '接口地址太长了' });
+  if (!model) return res.status(400).json({ error: '填一下模型名字' });
+  if (model.length > 80) return res.status(400).json({ error: '模型名太长了' });
+  if (key.length < 8) return res.status(400).json({ error: 'Key 看起来太短，检查一下' });
+  if (key.length > 300) return res.status(400).json({ error: 'Key 太长了' });
+
+  req.user.aiConfig = { base, model, key: encryptSecret(key), updatedAt: new Date().toISOString() };
+  store.save();
+  res.json({ ok: true, ai: aiStatusFor(req.user) });
+});
+
+app.delete('/api/ai/config', auth, (req, res) => {
+  delete req.user.aiConfig;
+  store.save();
+  res.json({ ok: true, ai: aiStatusFor(req.user) });
+});
+
+app.post('/api/ai/config/test', auth, async (req, res, next) => {
+  try {
+    const saved = req.user.aiConfig;
+    const key = String(req.body?.key || '').trim() || (saved?.key ? decryptSecret(saved.key) : '');
+    const base = String(req.body?.base || '').trim() || saved?.base || '';
+    const model = String(req.body?.model || '').trim() || saved?.model || '';
+    if (!key) throw fail(400, '先填 Key');
+    const result = await testAiConfig({ base, key, model });
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+/* ---------- AI 月度分析 ---------- */
+function buildMonthSummary(userId, month) {
+  const [y, m] = month.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const prevDate = new Date(y, m - 2, 1);
+  const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
+  const list = store.records.filter((r) => r.userId === userId && String(r.date).startsWith(month));
+  const expenseList = list.filter((r) => r.type !== 'income');
+  const sum = (arr) => arr.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const expense = sum(expenseList);
+  const income = sum(list.filter((r) => r.type === 'income'));
+
+  const byCat = new Map();
+  for (const r of expenseList) byCat.set(r.category, (byCat.get(r.category) || 0) + Number(r.amount || 0));
+  const cats = [...byCat.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, amount]) => ({ name, amount, share: expense ? (amount / expense) * 100 : 0 }));
+
+  const top = [...expenseList]
+    .sort((a, b) => Number(b.amount) - Number(a.amount))
+    .slice(0, 3)
+    .map((r) => ({ category: r.category, amount: Number(r.amount), note: r.note || '' }));
+
+  const prevExpense = sum(store.records.filter(
+    (r) => r.userId === userId && r.type !== 'income' && String(r.date).startsWith(prevMonth),
+  ));
+
+  const now = new Date();
+  const isCurrent = now.getFullYear() === y && now.getMonth() + 1 === m;
+  const elapsed = isCurrent ? Math.max(1, now.getDate()) : daysInMonth;
+
+  return {
+    month,
+    expense,
+    income,
+    count: list.length,
+    expenseCount: expenseList.length,
+    activeDays: new Set(expenseList.map((r) => r.date)).size,
+    days: elapsed,
+    avg: expense / elapsed,
+    cats,
+    top,
+    prevExpense,
+  };
+}
+
+app.post('/api/ai/analyze', auth, async (req, res, next) => {
+  try {
+    const raw = String(req.body?.month || '');
+    const month = /^\d{4}-\d{2}$/.test(raw) ? raw : new Date().toISOString().slice(0, 7);
+    const summary = buildMonthSummary(req.user.id, month);
+
+    if (!summary.count) {
+      return res.json({ ok: true, empty: true, month, message: '这个月还没有账，先记两笔我再看。' });
+    }
+
+    const result = await analyzeMonth(summary, req.user);
+    res.json({
+      ok: true,
+      month,
+      ...result,
+      stats: {
+        expense: summary.expense,
+        income: summary.income,
+        count: summary.count,
+        avg: summary.avg,
+      },
+    });
   } catch (e) { next(e); }
 });
 

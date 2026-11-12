@@ -29,6 +29,7 @@
 | 功能 | 说明 |
 |---|---|
 | 一句话记账 | 输入「午饭 28，打车 15」自动拆成两笔，日期、分类、备注都填好 |
+| AI 看账 | 统计页让 Loopy 读一遍当月数据，给两三条具体观察和一条建议 |
 | 手动记账 | 自定义数字键盘，单手可操作，比系统输入法快 |
 | 月度统计 | 支出构成、分类占比、近 6 个月趋势 |
 | 多账号隔离 | 每人一个账号，各记各的，数据不串 |
@@ -209,7 +210,18 @@ AI_MODEL=deepseek-chat
 
 `AI_API_KEY` 优先级最高；旧的 `DEEPSEEK_API_KEY` 写法也继续兼容。
 
-Key 只存在服务器上，前端拿不到，也不会进 git（`.env` 已忽略）。
+### 用户自带接口
+
+服务器配的 Key 是**所有人共用的默认值**。每个账号可以在「我的 → AI 记账 → 用自己的接口」里换成自己的地址、模型和 Key，改完立刻生效，也可以一键改回默认。
+
+几个实现细节：
+
+- 用户 Key 用 AES-256-GCM 加密后存进 `db.json`，主密钥在数据目录的 `.aisecret`（`0600`）。`db.json` 单独泄露也解不开；`.aisecret` 丢了只是要重填，账目不受影响。
+- 前端只拿得到尾号掩码，接口 `GET /api/ai/config` 永远不返回完整 Key。
+- 保存前有「测一下」，会真发一次请求，把 401 / 404 / 模型名不对这类错误翻成中文。
+- 导出备份不含任何 Key，只导出账目。
+
+服务器端的 Key 仍然只存在 `.env`（已进 `.gitignore`），不会打包进前端，也不会进 git。
 
 ---
 
@@ -278,7 +290,8 @@ ledger-app/
 │   ├── index.js           Express 路由：鉴权、账目、AI、导入导出
 │   ├── auth.js            scrypt 密码哈希 + token 会话
 │   ├── store.js           JSON 存储，原子写入 + 防抖落盘
-│   ├── ai.js              AI 解析，供应商无关（通义 / DeepSeek / 任意兼容接口）
+│   ├── ai.js              AI 解析与分析，供应商无关（通义 / DeepSeek / 任意兼容接口）
+│   ├── secret.js          用户自带 Key 的 AES-256-GCM 加解密
 │   └── env.js             轻量 .env 解析
 ├── public/                前端（无框架，纯原生 JS）
 │   ├── index.html
@@ -288,8 +301,6 @@ ledger-app/
 │   ├── sw.js              Service Worker 离线缓存
 │   ├── icons/             PWA / 主屏图标
 │   └── loopy/             九种 Loopy 表情（分类图标、头像、登录页主图）
-├── assets/
-│   └── loopy-head.webp    1024px 头部素材，画 App 图标用
 ├── deploy/
 │   ├── install.sh         一键部署
 │   ├── update.sh          只更新代码

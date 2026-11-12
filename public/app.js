@@ -61,6 +61,9 @@ const state = {
   user: null,
   records: [],
   aiEnabled: false,
+  ai: { enabled: false, source: '', model: '' },
+  aiConfig: null,
+  analysis: null,
   month: (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() + 1 }; })(),
   view: 'home',
   offline: false,
@@ -119,6 +122,8 @@ function toast(msg) {
 function clearSession() {
   state.token = '';
   state.user = null;
+  state.analysis = null;
+  state.aiConfig = null;
   localStorage.removeItem(TOKEN_KEY);
 }
 
@@ -237,7 +242,7 @@ async function submitAuth(e) {
     localStorage.setItem(TOKEN_KEY, data.token);
     await loadRecords();
     const me = await api('/api/me').catch(() => null);
-    if (me) state.aiEnabled = me.aiEnabled;
+    if (me) applyAiStatus(me);
     showApp();
     toast(`欢迎，${data.user.username}`);
   } catch (err) {
@@ -248,6 +253,12 @@ async function submitAuth(e) {
   }
 }
 
+/* AI 状态：能不能用、用的是自己的接口还是默认的 */
+function applyAiStatus(payload) {
+  state.ai = payload.ai || { enabled: Boolean(payload.aiEnabled), source: '', model: '' };
+  state.aiEnabled = Boolean(state.ai.enabled);
+}
+
 /* ================= 数据 ================= */
 
 function writeCache() {
@@ -256,6 +267,7 @@ function writeCache() {
       records: state.records,
       user: state.user,
       aiEnabled: state.aiEnabled,
+      ai: state.ai,
       savedAt: Date.now(),
     }));
   } catch { /* 容量满了就算了 */ }
@@ -412,6 +424,10 @@ function renderTrend() {
 
 /* ================= 渲染：设置 ================= */
 
+function monthKey() {
+  return `${state.month.y}-${pad2(state.month.m)}`;
+}
+
 function renderSettings() {
   const name = state.user?.username || '—';
   $('userName').textContent = name;
@@ -421,11 +437,49 @@ function renderSettings() {
     $('userSince').textContent = `记账第 ${Math.max(1, Math.ceil((Date.now() - d.getTime()) / 86400000))} 天`;
   }
 
-  $('aiStatus').textContent = state.aiEnabled
-    ? '已启用，直接在首页输入「午饭 28」就能记。'
-    : '未启用。在服务器的 .env 里填 AI_API_KEY 后重启服务即可。';
+  const ai = state.ai || {};
+  if (!ai.enabled) {
+    $('aiStatus').textContent = '还没开启。填一个自己的接口就能用。';
+  } else if (ai.source === 'user') {
+    $('aiStatus').textContent = `用的是你自己的接口（${ai.model}）。首页输入「午饭 28」就能记。`;
+  } else {
+    $('aiStatus').textContent = `已开启（${ai.model}）。首页输入「午饭 28」就能记。`;
+  }
+  $('aiForm').hidden = !ai.enabled || state.offline;
+  $('aiConfigToggle').textContent = ai.source === 'user' ? '改我的接口' : '用自己的接口';
+}
 
-  $('aiForm').hidden = !state.aiEnabled || state.offline;
+/* Loopy 的分析结果，换月份就作废，不串月份 */
+function renderAnalysis() {
+  const card = $('aiThinkCard');
+  const box = $('aiThinkBody');
+  const btn = $('aiThinkBtn');
+  card.hidden = !state.ai?.enabled;
+
+  const a = state.analysis && state.analysis.month === monthKey() ? state.analysis : null;
+
+  if (!a) {
+    box.hidden = true;
+    box.innerHTML = '';
+    btn.textContent = '帮我看一眼';
+    return;
+  }
+
+  if (a.empty) {
+    box.hidden = false;
+    box.innerHTML = `<p class="say-head">${escapeHtml(a.message || '这个月还没有账')}</p>`;
+    btn.textContent = '再看一次';
+    return;
+  }
+
+  const points = (a.points || []).map((p) => `<li>${escapeHtml(p)}</li>`).join('');
+  box.hidden = false;
+  box.innerHTML = `
+    <p class="say-head">${escapeHtml(a.headline || '')}</p>
+    ${points ? `<ul class="say-points">${points}</ul>` : ''}
+    ${a.tip ? `<p class="say-tip">${escapeHtml(a.tip)}</p>` : ''}
+    <p class="say-note">Loopy 随口说说，钱还是你自己管</p>`;
+  btn.textContent = '再说两句';
 }
 
 function renderAll() {
@@ -434,6 +488,7 @@ function renderAll() {
   renderSummary(list);
   renderList(list);
   renderStats(list);
+  renderAnalysis();
   renderSettings();
 }
 
@@ -567,6 +622,131 @@ async function askAI(e) {
   }
 }
 
+/* ================= AI 看账 ================= */
+
+async function askAnalyze() {
+  const btn = $('aiThinkBtn');
+  if (!state.ai?.enabled) {
+    toast('先去「我的」里配一个 AI 接口');
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Loopy 在翻账本…';
+  try {
+    const data = await api('/api/ai/analyze', { method: 'POST', body: { month: monthKey() } });
+    state.analysis = data;
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    btn.disabled = false;
+    renderAnalysis();
+  }
+}
+
+/* ================= 自己的 AI 接口 ================= */
+
+function aiConfigMsg(text, ok = false) {
+  const el = $('aiConfigMsg');
+  el.hidden = !text;
+  el.textContent = text || '';
+  el.style.color = ok ? 'var(--green)' : 'var(--pink-deep)';
+}
+
+async function openAiConfig() {
+  const box = $('aiConfigBox');
+  const toggle = $('aiConfigToggle');
+
+  if (!box.hidden) {
+    box.hidden = true;
+    toggle.textContent = state.ai?.source === 'user' ? '改我的接口' : '用自己的接口';
+    return;
+  }
+
+  box.hidden = false;
+  toggle.textContent = '收起';
+  aiConfigMsg('');
+  try {
+    const cfg = await api('/api/ai/config');
+    state.aiConfig = cfg;
+    if (cfg.custom) {
+      $('aiBase').value = cfg.custom.base;
+      $('aiModel').value = cfg.custom.model;
+      $('aiKey').placeholder = `${cfg.custom.hint} 已保存，要改就填新的`;
+      $('aiClearBtn').hidden = false;
+    } else if (cfg.suggest) {
+      $('aiBase').value = cfg.suggest.base || '';
+      $('aiModel').value = cfg.suggest.model || '';
+    }
+  } catch (err) {
+    aiConfigMsg(err.message);
+  }
+}
+
+async function testAi() {
+  const btn = $('aiTestBtn');
+  btn.disabled = true;
+  aiConfigMsg('接通中…', true);
+  try {
+    const r = await api('/api/ai/config/test', {
+      method: 'POST',
+      body: {
+        base: $('aiBase').value.trim(),
+        model: $('aiModel').value.trim(),
+        key: $('aiKey').value.trim(),
+      },
+    });
+    aiConfigMsg(`通了，${r.ms} 毫秒，模型 ${r.model}`, true);
+  } catch (err) {
+    aiConfigMsg(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function saveAi() {
+  const btn = $('aiSaveBtn');
+  btn.disabled = true;
+  try {
+    const r = await api('/api/ai/config', {
+      method: 'PUT',
+      body: {
+        base: $('aiBase').value.trim(),
+        model: $('aiModel').value.trim(),
+        key: $('aiKey').value.trim(),
+      },
+    });
+    applyAiStatus({ ai: r.ai });
+    $('aiKey').value = '';
+    $('aiConfigBox').hidden = true;
+    $('aiConfigToggle').hidden = false;
+    state.analysis = null;
+    renderAll();
+    toast('已换成你的接口');
+  } catch (err) {
+    aiConfigMsg(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function clearAi() {
+  if (!confirm('改回默认接口？你自己的 Key 会被删掉。')) return;
+  try {
+    const r = await api('/api/ai/config', { method: 'DELETE' });
+    applyAiStatus({ ai: r.ai });
+    $('aiBase').value = '';
+    $('aiModel').value = '';
+    $('aiKey').value = '';
+    $('aiKey').placeholder = 'sk-…';
+    $('aiClearBtn').hidden = true;
+    aiConfigMsg('已改回默认', true);
+    state.analysis = null;
+    renderAll();
+  } catch (err) {
+    aiConfigMsg(err.message);
+  }
+}
+
 /* ================= 备份 ================= */
 
 async function exportBackup() {
@@ -623,7 +803,7 @@ async function boot() {
   try {
     const me = await api('/api/me');
     state.user = me.user;
-    state.aiEnabled = Boolean(me.aiEnabled);
+    applyAiStatus(me);
     await loadRecords();
     showApp();
   } catch (err) {
@@ -636,6 +816,7 @@ async function boot() {
       state.records = cache.records;
       state.user = cache.user;
       state.aiEnabled = Boolean(cache.aiEnabled);
+      state.ai = cache.ai || { enabled: Boolean(cache.aiEnabled), source: '', model: '' };
       state.offline = true;
       $('offlineBar').hidden = false;
       $('appRoot').hidden = false;
@@ -667,11 +848,13 @@ function bind() {
   $('prevMonth').addEventListener('click', () => {
     const d = new Date(state.month.y, state.month.m - 2, 1);
     state.month = { y: d.getFullYear(), m: d.getMonth() + 1 };
+    state.analysis = null;
     renderAll();
   });
   $('nextMonth').addEventListener('click', () => {
     const d = new Date(state.month.y, state.month.m, 1);
     state.month = { y: d.getFullYear(), m: d.getMonth() + 1 };
+    state.analysis = null;
     renderAll();
   });
 
@@ -719,6 +902,12 @@ function bind() {
   });
 
   $('aiForm').addEventListener('submit', askAI);
+  $('aiThinkBtn').addEventListener('click', askAnalyze);
+
+  $('aiConfigToggle').addEventListener('click', openAiConfig);
+  $('aiTestBtn').addEventListener('click', testAi);
+  $('aiSaveBtn').addEventListener('click', saveAi);
+  $('aiClearBtn').addEventListener('click', clearAi);
 
   $('exportBtn').addEventListener('click', exportBackup);
   $('importBtn').addEventListener('click', () => $('importFile').click());

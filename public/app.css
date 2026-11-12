@@ -840,6 +840,49 @@ img { -webkit-user-drag: none; user-select: none; }
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* ---------- Loopy 看账 ---------- */
+.loopy-card {
+  background: linear-gradient(165deg, #ffeaf3 0%, #ffffff 64%);
+  border: 1px solid var(--line);
+}
+.loopy-head { display: flex; align-items: center; gap: 10px; }
+.loopy-head img { width: 46px; height: 46px; flex: 0 0 46px; object-fit: contain; }
+.loopy-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.loopy-title b { font-size: 15px; font-weight: 600; }
+.loopy-title span { font-size: 12px; color: var(--ink-2); }
+
+.loopy-body {
+  margin-top: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px 15px;
+}
+.loopy-body .say-head { font-size: 15px; font-weight: 600; line-height: 1.5; }
+.loopy-body .say-points { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
+.loopy-body .say-points li { margin-bottom: 4px; line-height: 1.6; }
+.loopy-body .say-points li::marker { color: var(--pink); }
+.loopy-body .say-tip {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  background: var(--pink-tint);
+  border-radius: 12px;
+  font-size: 13px;
+  color: var(--pink-deep);
+  line-height: 1.6;
+}
+.loopy-body .say-note { margin: 8px 0 0; font-size: 11px; color: var(--ink-3); }
+
+/* ---------- 自己的 AI 接口 ---------- */
+.ai-config {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+}
+.ai-config .field { margin-bottom: 12px; }
+.ai-config .field input { font-size: 13px; }
+.ai-config .link-btn { margin-top: 4px; }
+
 @media (min-width: 520px) {
   .main, .topbar { max-width: 520px; margin: 0 auto; }
   .sheet { max-width: 520px; margin: 0 auto; border-radius: 26px 26px 0 0; }

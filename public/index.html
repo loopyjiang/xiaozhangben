@@ -115,6 +115,18 @@
         </div>
       </div>
 
+      <div class="card loopy-card" id="aiThinkCard">
+        <div class="loopy-head">
+          <img src="loopy/01-smile.webp" alt="" width="46" height="46">
+          <div class="loopy-title">
+            <b>让 Loopy 看看这个月</b>
+            <span id="aiThinkHint">翻一遍账本，说两句实话</span>
+          </div>
+        </div>
+        <div class="loopy-body" id="aiThinkBody" hidden></div>
+        <button class="btn ghost full" id="aiThinkBtn">帮我看一眼</button>
+      </div>
+
       <div class="section-head"><h2>钱都花在哪了</h2></div>
       <div class="cat-list" id="catList"></div>
 
@@ -136,7 +148,31 @@
       <div class="card">
         <h3>AI 记账</h3>
         <p class="desc" id="aiStatus">检查中…</p>
-        <p class="desc">Key 放在服务器的环境变量里，手机上拿不到，也不会外泄。</p>
+        <div class="row-btns">
+          <button class="btn ghost" id="aiConfigToggle">用自己的接口</button>
+        </div>
+
+        <div class="ai-config" id="aiConfigBox" hidden>
+          <label class="field">
+            <span>接口地址</span>
+            <input id="aiBase" type="text" inputmode="url" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                   autocomplete="off" spellcheck="false">
+          </label>
+          <label class="field">
+            <span>模型</span>
+            <input id="aiModel" type="text" placeholder="qwen3.8-max" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="field">
+            <span>API Key</span>
+            <input id="aiKey" type="password" placeholder="sk-…" autocomplete="off">
+          </label>
+          <p class="desc" id="aiConfigMsg" hidden></p>
+          <div class="row-btns">
+            <button class="btn ghost" id="aiTestBtn">测一下</button>
+            <button class="btn primary" id="aiSaveBtn">保存</button>
+          </div>
+          <button class="link-btn" id="aiClearBtn" hidden>改回默认接口</button>
+        </div>
       </div>
 
       <div class="card">
@@ -156,7 +192,7 @@
       </div>
 
       <button class="btn ghost danger full" id="logoutBtn">退出登录</button>
-      <p class="version">Loopy 小账本 v1.0 · 自托管</p>
+      <p class="version">Loopy 小账本 v1.2 · 自托管</p>
       <a class="icp" id="icpSettings" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" hidden></a>
     </section>
 

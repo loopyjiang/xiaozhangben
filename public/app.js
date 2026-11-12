@@ -446,7 +446,9 @@ function renderSettings() {
     $('aiStatus').textContent = `已开启（${ai.model}）。首页输入「午饭 28」就能记。`;
   }
   $('aiForm').hidden = !ai.enabled || state.offline;
-  $('aiConfigToggle').textContent = ai.source === 'user' ? '改我的接口' : '用自己的接口';
+  $('aiConfigToggle').textContent = $('aiConfigBox').hidden
+    ? (ai.source === 'user' ? '改我的接口' : '用自己的接口')
+    : '收起';
 }
 
 /* Loopy 的分析结果，换月份就作废，不串月份 */

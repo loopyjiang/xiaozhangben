@@ -43,13 +43,27 @@
 
 ### 安卓
 
+有两种用法，选一种就行。
+
+**省事：直接用浏览器（推荐）**
+
+1. 用 **Chrome** 打开 `https://ledger.krshare.site`
+2. 登录后点右上角 `⋮` → **安装应用 / 添加到主屏幕**
+3. 桌面多一个 Loopy 图标，点开是全屏的，没有地址栏
+
+好处是**永远最新**：后端和界面都是线上的，不用重装。代价是没有推送通知（本来也没有）。
+
+**装 APK**
+
 **下载地址：<https://github.com/loopyjiang/xiaozhangben/releases/latest>**
 
-点开 → 在 Assets 里下载 `xiaozhangben-x.x.x-debug.apk` → 传到手机安装。
+点开 → 在 Assets 里下载 `xiaozhangben-1.3.2.apk` → 传到手机安装。装好打开就能直接登录，服务器地址已经填好了。
 
 安装时系统会提示「未知来源应用」，允许一次即可。这是 debug 签名的包，能正常安装使用，只是不能上架应用商店。
 
-> 如果下载慢，把链接发到微信「文件传输助手」，手机上点开另存也行。也可以从 `Actions` 页面下载最新构建的产物（需要登录 GitHub）。
+> APK 里的前端是打包进去的，界面更新要重装新版本；只想看最新界面就别装 APK。
+>
+> 如果下载慢，把链接发到微信「文件传输助手」，手机上点开另存也行。
 
 ### iPhone
 
@@ -63,9 +77,16 @@
 
 ### 自己构建
 
-每次推送 `main` 分支，GitHub Actions 会自动打出安卓包：
+**发版**：打个 tag 推上去，Actions 会自动构建并发布 Release（带 APK 附件）：
 
-- 构建结果：仓库 **Actions** → `构建手机安装包` → 最新一次运行 → 底部 **Artifacts** → `xiaozhangben-android-apk`
+```bash
+git tag -a v1.3.3 -m "v1.3.3 改了什么"
+git push origin v1.3.3
+```
+
+**只想要构建产物**：推 `main` 分支也会打包，但只留在 Artifacts 里：
+
+- 仓库 **Actions** → `构建手机安装包` → 最新一次运行 → 底部 **Artifacts** → `xiaozhangben-android-apk`
 - 产物保留 90 天，过期就重新跑一次
 
 iOS 的未签名 `.ipa` 需要手动触发（Actions → Run workflow），构建出来**装不进手机**，只有配上 Apple 开发者账号的签名证书后才有意义。

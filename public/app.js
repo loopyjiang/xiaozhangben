@@ -8,7 +8,9 @@ const API_BASE_KEY = 'ledger.apiBase';
 const IS_NATIVE = location.protocol === 'capacitor:' || location.protocol === 'file:'
   || Boolean(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
-let API_BASE = (localStorage.getItem(API_BASE_KEY) || '').replace(/\/+$/, '');
+/* 装成 App 之后开箱指向自己的服务器，省得家里人第一次还要手打网址 */
+const DEFAULT_API_BASE = 'https://ledger.krshare.site';
+let API_BASE = (localStorage.getItem(API_BASE_KEY) || (IS_NATIVE ? DEFAULT_API_BASE : '')).replace(/\/+$/, '');
 
 const CATS = {
   expense: [

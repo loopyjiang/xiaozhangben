@@ -554,7 +554,8 @@ function openSheet(type = 'expense') {
     amount: '0',
     category: CATS[type][0][0],
     note: '',
-    date: todayStr(),
+    /* 正在看某一天时，记一笔默认就记到那天 */
+    date: state.month.d ? dayKey() : todayStr(),
   };
   $('dateInput').value = state.draft.date;
   $('noteInput').value = '';
@@ -945,18 +946,18 @@ function petGreet() {
 
   let line;
   if (!state.ai?.enabled) {
-    line = '我的 AI 还没接上，去「我的」里配一下就能聊天啦';
+    line = 'AI 还没接上，先去「我的」';
   } else {
     const today = state.records.filter((r) => r.date === todayStr());
     const list = monthRecords().filter((r) => r.type !== 'income');
     const total = list.reduce((s, r) => s + Number(r.amount), 0);
-    if (!today.length) line = '今天还没记账呢，点我说一句就行～';
-    else if (total > 0 && total > 3000) line = '这个月花得有点猛，要不要我帮你看看？';
-    else line = '我在～想聊账本的事就点我';
+    if (!today.length) line = '今天还没记呢，点我说一句';
+    else if (total > 0 && total > 3000) line = '这月花得有点猛，要看看吗';
+    else line = '我在～点我看账';
   }
 
   setTimeout(() => {
-    petSay(line, 5200);
+    petSay(line, 3800);
     petAnim('wiggle');
   }, 1300);
 }

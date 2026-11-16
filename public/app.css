@@ -989,7 +989,7 @@ img { -webkit-user-drag: none; user-select: none; }
   bottom: calc(100% - 4px);
   z-index: 3;
   min-width: 92px;
-  max-width: 168px;
+  max-width: 190px;
   width: max-content;
   padding: 8px 11px;
   background: #fff;

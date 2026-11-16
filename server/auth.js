@@ -54,5 +54,11 @@ export function userFromToken(token) {
 }
 
 export function publicUser(user) {
-  return { id: user.id, username: user.username, createdAt: user.createdAt };
+  return {
+    id: user.id,
+    username: user.username,
+    createdAt: user.createdAt,
+    nickname: user.nickname || '',
+    avatar: user.avatar || '',
+  };
 }

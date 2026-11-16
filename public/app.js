@@ -66,7 +66,7 @@ const state = {
   ai: { enabled: false, source: '', model: '' },
   aiConfig: null,
   analysis: null,
-  month: (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() + 1 }; })(),
+  month: (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() + 1, d: null }; })(),
   view: 'home',
   offline: false,
   draft: null,
@@ -180,6 +180,8 @@ function showApp() {
   loadIcp();
   renderAll();
   initPet();
+  /* 天气走后台，别卡着首页出来 */
+  loadWeather();
 }
 
 let authMode = 'login';
@@ -278,9 +280,13 @@ function applyAiStatus(payload) {
 
 function writeCache() {
   try {
+    /* 头像 base64 不塞进离线缓存，太占地方；离线时用默认图标就行 */
+    const user = state.user ? { ...state.user } : null;
+    if (user?.avatar?.startsWith('data:')) user.avatar = '';
+
     localStorage.setItem(CACHE_KEY, JSON.stringify({
       records: state.records,
-      user: state.user,
+      user,
       aiEnabled: state.aiEnabled,
       ai: state.ai,
       savedAt: Date.now(),
@@ -304,13 +310,15 @@ async function loadRecords() {
 
 /* ================= 渲染：明细 ================= */
 
-function monthRecords() {
-  const prefix = `${state.month.y}-${pad2(state.month.m)}`;
-  return state.records.filter((r) => String(r.date).startsWith(prefix));
-}
-
 function renderMonthLabel() {
-  $('monthLabel').textContent = `${state.month.y}年${state.month.m}月`;
+  const el = $('monthLabel');
+  if (state.month.d) {
+    el.textContent = `${state.month.m}月${state.month.d}日`;
+    el.classList.add('day');
+  } else {
+    el.textContent = `${state.month.y}年${state.month.m}月`;
+    el.classList.remove('day');
+  }
 }
 
 function renderSummary(list) {
@@ -319,6 +327,10 @@ function renderSummary(list) {
     if (r.type === 'income') income += Number(r.amount) || 0;
     else expense += Number(r.amount) || 0;
   }
+  const oneDay = Boolean(state.month.d);
+  $('sumCap').textContent = oneDay ? `${state.month.m}月${state.month.d}日支出` : '本月支出';
+  $('listTitle').textContent = oneDay ? `${state.month.m}月${state.month.d}日的账` : '这个月的账';
+  $('backToMonth').hidden = !oneDay;
   $('sumExpense').textContent = money(expense);
   $('sumIncome').textContent = `¥${money(income)}`;
   $('sumBalance').textContent = `¥${money(income - expense)}`;
@@ -331,7 +343,7 @@ function renderList(list) {
   if (!list.length) {
     box.innerHTML = `<div class="empty">
       <img src="loopy/04-bag.webp" alt="" width="132" height="132">
-      <b>这个月还没有记账</b>点右下角的 + 记第一笔
+      <b>${state.month.d ? '这天还没记账' : '这个月还没有记账'}</b>点右下角的 + 记一笔
     </div>`;
     return;
   }
@@ -443,9 +455,18 @@ function monthKey() {
   return `${state.month.y}-${pad2(state.month.m)}`;
 }
 
+function dayKey() {
+  return `${state.month.y}-${pad2(state.month.m)}-${pad2(state.month.d || 1)}`;
+}
+
+/* 整月的账；选中某天时只看那一天 */
+function monthRecords() {
+  const all = state.records.filter((r) => String(r.date).startsWith(monthKey()));
+  return state.month.d ? all.filter((r) => String(r.date) === dayKey()) : all;
+}
+
 function renderSettings() {
-  const name = state.user?.username || '—';
-  $('userName').textContent = name;
+  $('userName').textContent = displayName();
 
   if (state.user?.createdAt) {
     const d = new Date(state.user.createdAt);
@@ -505,9 +526,11 @@ function renderAll() {
   const list = monthRecords();
   renderSummary(list);
   renderList(list);
-  renderStats(list);
+  /* 统计页永远按整月算，选中某天也不缩水 */
+  renderStats(state.records.filter((r) => String(r.date).startsWith(monthKey())));
   renderAnalysis();
   renderSettings();
+  renderAvatar();
 }
 
 /* ================= 视图切换 ================= */
@@ -1203,6 +1226,304 @@ function bindChat() {
   });
 }
 
+/* ================= 选日期 ================= */
+
+/* 面板里正在翻的年月，和页面当前看的月份分开，取消时不串 */
+const calView = { y: 0, m: 0 };
+
+function showPanel(panelId, maskId) {
+  const panel = $(panelId);
+  const mask = $(maskId);
+  mask.hidden = false;
+  panel.hidden = false;
+  requestAnimationFrame(() => {
+    mask.classList.add('show');
+    panel.classList.add('show');
+  });
+}
+
+function hidePanel(panelId, maskId) {
+  const panel = $(panelId);
+  const mask = $(maskId);
+  panel.classList.remove('show');
+  mask.classList.remove('show');
+  setTimeout(() => {
+    if (!panel.classList.contains('show')) panel.hidden = true;
+    if (!mask.classList.contains('show')) mask.hidden = true;
+  }, 300);
+}
+
+function openDatePanel() {
+  calView.y = state.month.y;
+  calView.m = state.month.m;
+  renderDatePanel();
+  showPanel('datePanel', 'dateMask');
+}
+
+function renderDatePanel() {
+  $('calYear').textContent = String(calView.y);
+
+  /* 有账的月份标个小点，一眼能看出哪几个月记过 */
+  const monthHits = new Set();
+  const dayHits = new Set();
+  for (const r of state.records) {
+    const s = String(r.date || '');
+    if (!s.startsWith(`${calView.y}-`)) continue;
+    const m = Number(s.slice(5, 7));
+    monthHits.add(m);
+    if (m === calView.m) dayHits.add(Number(s.slice(8, 10)));
+  }
+
+  $('monthGrid').innerHTML = Array.from({ length: 12 }, (_, i) => {
+    const m = i + 1;
+    const cls = `month-cell${m === calView.m ? ' on' : ''}`;
+    const dot = monthHits.has(m) ? '<i class="dot"></i>' : '';
+    return `<button class="${cls}" type="button" data-m="${m}">${m}月${dot}</button>`;
+  }).join('');
+
+  const firstDay = new Date(calView.y, calView.m - 1, 1).getDay();
+  const lead = (firstDay + 6) % 7;              /* 周一开头 */
+  const days = new Date(calView.y, calView.m, 0).getDate();
+  const prevDays = new Date(calView.y, calView.m - 1, 0).getDate();
+  const today = todayStr();
+
+  const cells = [];
+  for (let i = lead - 1; i >= 0; i--) {
+    cells.push(`<span class="cal-cell out">${prevDays - i}</span>`);
+  }
+  for (let d = 1; d <= days; d++) {
+    const key = `${calView.y}-${pad2(calView.m)}-${pad2(d)}`;
+    const cls = ['cal-cell'];
+    if (key === today) cls.push('today');
+    if (state.month.d && state.month.y === calView.y && state.month.m === calView.m && state.month.d === d) {
+      cls.push('on');
+    }
+    const dot = dayHits.has(d) ? '<i class="dot"></i>' : '';
+    cells.push(`<button class="${cls.join(' ')}" type="button" data-d="${d}">${d}${dot}</button>`);
+  }
+  const tail = (7 - (cells.length % 7)) % 7;
+  for (let i = 1; i <= tail; i++) cells.push(`<span class="cal-cell out">${i}</span>`);
+
+  $('calGrid').innerHTML = cells.join('');
+}
+
+function applyCalPick(day) {
+  state.month = { y: calView.y, m: calView.m, d: day };
+  state.analysis = null;
+  hidePanel('datePanel', 'dateMask');
+  if (state.view !== 'home') switchView('home');
+  renderAll();
+}
+
+function pickToday() {
+  const d = new Date();
+  calView.y = d.getFullYear();
+  calView.m = d.getMonth() + 1;
+  applyCalPick(d.getDate());
+}
+
+/* ================= 天气 ================= */
+
+const WEATHER_CITY_KEY = 'ledger.weather.city';
+const weather = { data: null, loading: false, failed: false };
+
+function weatherEmoji(text) {
+  const t = String(text || '');
+  if (/雷/.test(t)) return '⛈️';
+  if (/雪/.test(t)) return '❄️';
+  if (/雨/.test(t)) return '🌧️';
+  if (/雾|霾|沙|尘/.test(t)) return '🌫️';
+  if (/阴/.test(t)) return '☁️';
+  if (/多云/.test(t)) return '⛅';
+  if (/晴/.test(t)) return '☀️';
+  return '🌤️';
+}
+
+function aqiLabel(aqi) {
+  if (!Number.isFinite(aqi)) return '—';
+  if (aqi <= 50) return `${aqi} 优`;
+  if (aqi <= 100) return `${aqi} 良`;
+  if (aqi <= 150) return `${aqi} 轻度污染`;
+  if (aqi <= 200) return `${aqi} 中度污染`;
+  if (aqi <= 300) return `${aqi} 重度污染`;
+  return `${aqi} 严重污染`;
+}
+
+function renderWeather() {
+  const pill = $('weatherPill');
+  const d = weather.data;
+
+  if (!d) {
+    pill.hidden = false;
+    $('weatherEmoji').textContent = '🌡️';
+    $('weatherTemp').textContent = weather.failed ? '—' : '…';
+    $('weatherCity').textContent = '天气';
+    pill.classList.toggle('stale', weather.failed);
+    return;
+  }
+
+  pill.hidden = false;
+  pill.classList.remove('stale');
+  $('weatherEmoji').textContent = weatherEmoji(d.text);
+  $('weatherTemp').textContent = `${d.temp}°`;
+  $('weatherCity').textContent = d.city || '';
+
+  $('wxEmoji').textContent = weatherEmoji(d.text);
+  $('wxTemp').textContent = String(d.temp);
+  $('wxText').textContent = d.text || '—';
+  $('wxCity').textContent = d.city || '—';
+  $('wxWind').textContent = d.wind || '—';
+  $('wxHumid').textContent = d.humidity || '—';
+  $('wxAqi').textContent = aqiLabel(d.aqi);
+  $('wxTime').textContent = d.observedAt ? `今天 ${d.observedAt}` : '—';
+}
+
+async function loadWeather(force = false) {
+  if (weather.loading || state.offline) return;
+  if (!force && weather.data) return;
+  weather.loading = true;
+  if (!weather.data) {
+    $('weatherPill').hidden = false;
+    $('weatherTemp').textContent = '…';
+    $('weatherCity').textContent = '天气';
+  }
+
+  try {
+    const saved = localStorage.getItem(WEATHER_CITY_KEY) || '';
+    const data = await api(`/api/weather${saved ? `?city=${encodeURIComponent(saved)}` : ''}`);
+    if (data?.ok) {
+      weather.data = data;
+      weather.failed = false;
+    } else {
+      weather.data = null;
+      weather.failed = true;
+    }
+  } catch {
+    weather.failed = true;
+  } finally {
+    weather.loading = false;
+    renderWeather();
+  }
+}
+
+function openWeatherPanel() {
+  if (weather.failed && !weather.loading) loadWeather(true);
+  $('wxHint').textContent = weather.data
+    ? '数据来自中国天气网，每十分钟更新一次'
+    : '查不到天气时，可以手动选一个城市';
+  $('wxCityInput').value = localStorage.getItem(WEATHER_CITY_KEY) || '';
+  showPanel('weatherPanel', 'weatherMask');
+}
+
+function saveWeatherCity() {
+  const city = $('wxCityInput').value.trim();
+  if (!city) return;
+  localStorage.setItem(WEATHER_CITY_KEY, city);
+  weather.data = null;
+  hidePanel('weatherPanel', 'weatherMask');
+  loadWeather(true);
+}
+
+/* ================= 昵称与头像 ================= */
+
+const AVATAR_PICKS = [
+  '01-smile', '02-eat', '03-car', '04-bag', '05-home',
+  '06-music', '07-flower', '08-study', '09-gift',
+];
+
+const profile = { avatar: '' };
+
+function displayName() {
+  return state.user?.nickname || state.user?.username || '我';
+}
+
+function avatarSrc() {
+  return state.user?.avatar || 'loopy/avatar.webp';
+}
+
+function renderAvatar() {
+  const src = avatarSrc();
+  $('userAvatar').src = src;
+  $('topFace').src = src;
+}
+
+function renderAvatarPicks() {
+  const current = profile.avatar;
+  const custom = current && current.startsWith('data:') ? ' on' : '';
+  const items = AVATAR_PICKS.map((name) => {
+    const src = `loopy/${name}.webp`;
+    const on = current === src ? ' on' : '';
+    return `<button type="button" data-src="${src}" aria-label="用这个头像">
+      <img src="${src}" alt="">
+    </button>`;
+  });
+  items.push(`<button type="button" class="pick-photo${custom}" id="pickPhoto" aria-label="用相册里的照片">
+    <img src="${current.startsWith('data:') ? current : 'loopy/avatar.webp'}" alt="">
+  </button>`);
+  $('avatarPicks').innerHTML = items.join('');
+}
+
+function openProfilePanel() {
+  profile.avatar = state.user?.avatar || '';
+  $('profileNick').value = state.user?.nickname || '';
+  $('profilePreview').src = avatarSrc();
+  $('profileMsg').hidden = true;
+  renderAvatarPicks();
+  showPanel('profilePanel', 'profileMask');
+}
+
+/* 上传的图先裁成正方形再压到 256px，JPEG 一般十几 KB */
+function usePhoto(file) {
+  if (!file) return;
+  if (!/^image\//.test(file.type)) { toast('要选一张图片'); return; }
+
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const side = Math.min(img.width, img.height);
+    ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+    profile.avatar = dataUrl;
+    $('profilePreview').src = dataUrl;
+    renderAvatarPicks();
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(url);
+    toast('这张图片读不出来');
+  };
+  img.src = url;
+}
+
+async function saveProfile() {
+  const btn = $('profileSave');
+  const nickname = $('profileNick').value.trim();
+  btn.disabled = true;
+  btn.textContent = '保存中…';
+  try {
+    const data = await api('/api/me', {
+      method: 'PATCH',
+      body: { nickname, avatar: profile.avatar },
+    });
+    state.user = data.user;
+    writeCache();
+    renderAll();
+    hidePanel('profilePanel', 'profileMask');
+    toast('改好啦');
+  } catch (err) {
+    $('profileMsg').textContent = err.message;
+    $('profileMsg').hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '保存';
+  }
+}
+
 /* ================= 备份 ================= */
 
 
@@ -1305,16 +1626,69 @@ function bind() {
 
   $('prevMonth').addEventListener('click', () => {
     const d = new Date(state.month.y, state.month.m - 2, 1);
-    state.month = { y: d.getFullYear(), m: d.getMonth() + 1 };
+    state.month = { y: d.getFullYear(), m: d.getMonth() + 1, d: null };
     state.analysis = null;
     renderAll();
   });
   $('nextMonth').addEventListener('click', () => {
     const d = new Date(state.month.y, state.month.m, 1);
-    state.month = { y: d.getFullYear(), m: d.getMonth() + 1 };
+    state.month = { y: d.getFullYear(), m: d.getMonth() + 1, d: null };
     state.analysis = null;
     renderAll();
   });
+
+  /* ---- 选日期 ---- */
+  $('monthLabel').addEventListener('click', openDatePanel);
+  $('dateMask').addEventListener('click', () => hidePanel('datePanel', 'dateMask'));
+  $('dateClose').addEventListener('click', () => hidePanel('datePanel', 'dateMask'));
+  $('yearPrev').addEventListener('click', () => { calView.y -= 1; renderDatePanel(); });
+  $('yearNext').addEventListener('click', () => { calView.y += 1; renderDatePanel(); });
+  $('monthGrid').addEventListener('click', (e) => {
+    const btn = e.target.closest('.month-cell');
+    if (!btn) return;
+    calView.m = Number(btn.dataset.m);
+    renderDatePanel();
+  });
+  $('calGrid').addEventListener('click', (e) => {
+    const btn = e.target.closest('.cal-cell[data-d]');
+    if (btn) applyCalPick(Number(btn.dataset.d));
+  });
+  $('calToday').addEventListener('click', pickToday);
+  $('calWholeMonth').addEventListener('click', () => applyCalPick(null));
+  $('backToMonth').addEventListener('click', () => {
+    calView.y = state.month.y;
+    calView.m = state.month.m;
+    applyCalPick(null);
+  });
+
+  /* ---- 天气 ---- */
+  $('weatherPill').addEventListener('click', openWeatherPanel);
+  $('weatherMask').addEventListener('click', () => hidePanel('weatherPanel', 'weatherMask'));
+  $('weatherClose').addEventListener('click', () => hidePanel('weatherPanel', 'weatherMask'));
+  $('wxCitySave').addEventListener('click', saveWeatherCity);
+  $('wxCityInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveWeatherCity(); }
+  });
+
+  /* ---- 昵称与头像 ---- */
+  $('editProfileBtn').addEventListener('click', openProfilePanel);
+  $('userAvatarBtn').addEventListener('click', openProfilePanel);
+  $('profileMask').addEventListener('click', () => hidePanel('profilePanel', 'profileMask'));
+  $('profileClose').addEventListener('click', () => hidePanel('profilePanel', 'profileMask'));
+  $('avatarUploadBtn').addEventListener('click', () => $('avatarFile').click());
+  $('avatarPicks').addEventListener('click', (e) => {
+    if (e.target.closest('#pickPhoto')) { $('avatarFile').click(); return; }
+    const btn = e.target.closest('button[data-src]');
+    if (!btn) return;
+    profile.avatar = btn.dataset.src;
+    $('profilePreview').src = profile.avatar;
+    renderAvatarPicks();
+  });
+  $('avatarFile').addEventListener('change', (e) => {
+    usePhoto(e.target.files?.[0]);
+    e.target.value = '';
+  });
+  $('profileSave').addEventListener('click', saveProfile);
 
   $('fabAdd').addEventListener('click', () => openSheet('expense'));
   $('sheetCancel').addEventListener('click', closeSheet);

@@ -13,6 +13,7 @@ import {
   aiEnabled, aiInfo, aiStatusFor, configFor, EXPENSE_CATS, INCOME_CATS,
 } from './ai.js';
 import { encryptSecret, decryptSecret, maskSecret } from './secret.js';
+import { getWeather } from './weather.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -129,6 +130,42 @@ app.post('/api/auth/logout', auth, (req, res) => {
 app.get('/api/me', auth, (req, res) => {
   const ai = aiStatusFor(req.user);
   res.json({ user: publicUser(req.user), aiEnabled: ai.enabled, ai });
+});
+
+/* 昵称和头像：头像走 data URL，前端已经压到 256px，正常十几 KB */
+app.patch('/api/me', auth, (req, res) => {
+  const body = req.body || {};
+  const patch = {};
+
+  if (body.nickname !== undefined) {
+    patch.nickname = String(body.nickname || '').trim().slice(0, 16);
+  }
+
+  if (body.avatar !== undefined) {
+    const avatar = String(body.avatar || '');
+    if (avatar === '' || /^loopy\/[a-z0-9-]+\.webp$/.test(avatar)) {
+      patch.avatar = avatar;
+    } else if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(avatar)) {
+      if (avatar.length > 400 * 1024) return res.status(413).json({ error: '头像太大了，换一张小一点的' });
+      patch.avatar = avatar;
+    } else {
+      return res.status(400).json({ error: '头像格式不支持' });
+    }
+  }
+
+  Object.assign(req.user, patch);
+  store.save();
+  res.json({ user: publicUser(req.user) });
+});
+
+/* 天气：没传 city 就按请求 IP 猜，猜不到让前端问用户 */
+app.get('/api/weather', auth, async (req, res, next) => {
+  try {
+    const city = String(req.query.city || '').trim().slice(0, 20);
+    res.json(await getWeather({ ip: req.ip, city }));
+  } catch (err) {
+    next(err);
+  }
 });
 
 /* ---------- 账目 ---------- */

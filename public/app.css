@@ -62,6 +62,7 @@ img { -webkit-user-drag: none; user-select: none; }
    登录 / 注册（对齐最初设计稿的排版）
    =========================================================== */
 .auth {
+  min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   align-items: center;
@@ -234,6 +235,7 @@ img { -webkit-user-drag: none; user-select: none; }
    主应用
    =========================================================== */
 .app {
+  min-height: 100vh;
   min-height: 100dvh;
   padding-bottom: calc(var(--tab-h) + 86px + env(safe-area-inset-bottom));
 }
@@ -247,6 +249,7 @@ img { -webkit-user-drag: none; user-select: none; }
   gap: 10px;
   padding: 12px 16px 10px;
   padding-top: calc(12px + env(safe-area-inset-top));
+  background: var(--bg);
   background: color-mix(in srgb, var(--bg) 90%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -655,6 +658,7 @@ img { -webkit-user-drag: none; user-select: none; }
   display: flex;
   height: calc(var(--tab-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
+  background: var(--card);
   background: color-mix(in srgb, var(--card) 94%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -818,7 +822,8 @@ img { -webkit-user-drag: none; user-select: none; }
   flex: 1;
   min-width: 0;
   padding: 12px;
-  font-size: 15px;
+  /* 16px 是 iOS 的底线，再小点一下输入框整页会放大 */
+  font-size: 16px;
 }
 
 .numpad {
@@ -1044,6 +1049,7 @@ img { -webkit-user-drag: none; user-select: none; }
   display: flex;
   flex-direction: column;
   bottom: var(--kb, 0px);
+  height: 78vh;
   height: 78dvh;
   max-height: min(640px, calc(100dvh - var(--kb, 0px) - 8px));
   background: var(--bg);
@@ -1186,7 +1192,7 @@ img { -webkit-user-drag: none; user-select: none; }
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--bg);
-  font-size: 15px;
+  font-size: 16px;
 }
 .chat-input:focus { outline: none; border-color: var(--pink); background: #fff; }
 .chat-send {
@@ -1283,6 +1289,7 @@ img { -webkit-user-drag: none; user-select: none; }
   transform: translateY(103%);
   visibility: hidden;
   transition: transform 0.26s cubic-bezier(0.22, 0.8, 0.3, 1), visibility 0.26s;
+  max-height: 86vh;
   max-height: 86dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1481,6 +1488,18 @@ img { -webkit-user-drag: none; user-select: none; }
   background: var(--pink-tint);
 }
 .edit-profile:active { background: var(--pink-soft); }
+
+/* 小屏（iPhone SE 这类 667 高）把登录页压紧一点，整张卡能一屏放下 */
+@media (max-height: 700px) {
+  .auth { padding: 18px 20px; padding-top: calc(18px + env(safe-area-inset-top)); padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  .brand { margin-bottom: 14px; }
+  .brand-face { width: 118px; height: 118px; }
+  .brand h1 { font-size: 20px; }
+  .brand p { font-size: 12px; }
+  .field { margin-bottom: 10px; }
+  .field input, .field-input, .ai-bar input { padding: 12px; }
+  .auth-card { padding: 18px 16px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .pet-img, .pet-shadow { animation: none; }

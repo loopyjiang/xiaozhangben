@@ -486,6 +486,29 @@ function renderSettings() {
     ? (ai.source === 'user' ? '改我的接口' : '用自己的接口')
     : '收起';
   $('petToggle').setAttribute('aria-checked', String(pet.on));
+  renderInstallHint();
+}
+
+/* 安卓和 iPhone 的安装路径完全不一样，别让用户照着错的那句找按钮 */
+function renderInstallHint() {
+  const el = $('installHint');
+  if (!el) return;
+  const standalone = window.matchMedia('(display-mode: standalone)').matches
+    || navigator.standalone === true;
+  if (standalone) {
+    el.textContent = '已经从桌面图标打开了，不用再装。';
+    return;
+  }
+  if (!$('installBtn').hidden) {
+    el.textContent = '点下面这个按钮直接装；找不到的话，用浏览器菜单里的「安装应用」。';
+    return;
+  }
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  el.textContent = isIOS
+    ? 'Safari 里点底部「分享」→「添加到主屏幕」，桌面上就有图标了。'
+    : 'Chrome 里点右上角 ⋮ →「安装应用」，桌面上就有图标了。';
 }
 
 /* Loopy 的分析结果，换月份就作废，不串月份 */
@@ -1780,6 +1803,7 @@ function bind() {
     e.preventDefault();
     state.installEvent = e;
     $('installBtn').hidden = false;
+    renderInstallHint();
   });
 
   $('installBtn').addEventListener('click', async () => {

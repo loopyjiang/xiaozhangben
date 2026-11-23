@@ -32,18 +32,14 @@ app.use(express.json({ limit: '2mb' }));
  * 接口在 https://你的域名，属于跨域请求。浏览器会先发 OPTIONS 预检，
  * 不处理的话手机上只会看到「网络连不上」，实际请求根本没发出去。
  */
-const LOCAL_ORIGINS = new Set([
-  'http://localhost', 'https://localhost',
-  'http://127.0.0.1', 'https://127.0.0.1',
-  'capacitor://localhost', 'ionic://localhost',
-]);
+const LOCAL_ORIGIN_RE = /^(https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?|capacitor:\/\/localhost|ionic:\/\/localhost)$/;
 
 app.use((req, res, next) => {
   const origin = req.get('origin');
   if (origin) {
     const host = req.get('host');
     const sameSite = origin === `https://${host}` || origin === `http://${host}`;
-    if (sameSite || LOCAL_ORIGINS.has(origin)) {
+    if (sameSite || LOCAL_ORIGIN_RE.test(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Vary', 'Origin');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');

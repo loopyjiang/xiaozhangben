@@ -1,4 +1,4 @@
-const CACHE = 'ledger-shell-v9';
+const CACHE = 'ledger-shell-v10';
 const SHELL = [
   './',
   './index.html',

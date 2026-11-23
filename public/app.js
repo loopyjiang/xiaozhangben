@@ -93,7 +93,13 @@ async function api(path, { method = 'GET', body } = {}) {
       cache: 'no-store',
     });
   } catch {
-    throw new ApiError('网络连不上，请检查网络或服务器地址', 0);
+    const target = API_BASE || location.origin;
+    throw new ApiError(
+      navigator.onLine === false
+        ? '手机没联网，先连 Wi-Fi 或流量'
+        : `连不上服务器（${target}），检查网络，或者重新填一次地址`,
+      0,
+    );
   }
 
   if (res.status === 401) {
@@ -189,8 +195,18 @@ let authMode = 'login';
 function normalizeServer(value) {
   let s = String(value || '').trim();
   if (!s) return '';
-  if (!/^https?:\/\//i.test(s)) s = `http://${s}`;
-  return s.replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+  s = s.replace(/\/+$/, '');
+
+  /* 公网域名一律走 https：明文 http 会被服务器 301 成 GET，登录直接坏掉 */
+  if (s.startsWith('http://')) {
+    const host = s.slice(7).split('/')[0].split(':')[0];
+    const isLocal = host === 'localhost' || host === '127.0.0.1'
+      || /^10\./.test(host) || /^192\.168\./.test(host)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+    if (!isLocal) s = `https://${s.slice(7)}`;
+  }
+  return s;
 }
 
 async function pingServer(base) {
@@ -246,7 +262,7 @@ async function submitAuth(e) {
   try {
     const typed = normalizeServer($('authServer').value);
     if (typed && typed !== API_BASE) {
-      if (!(await pingServer(typed))) throw new ApiError('连不上这个服务器地址，检查一下 IP 和端口', 0);
+      if (!(await pingServer(typed))) throw new ApiError(`连不上 ${typed}，检查一下地址和手机网络`, 0);
       API_BASE = typed;
       localStorage.setItem(API_BASE_KEY, typed);
     }

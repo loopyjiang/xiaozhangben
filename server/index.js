@@ -27,6 +27,34 @@ app.disable('x-powered-by');
 app.set('trust proxy', true);
 app.use(express.json({ limit: '2mb' }));
 
+/**
+ * 装成 App 之后，页面跑在 http://localhost（WebView 的本地源），
+ * 接口在 https://你的域名，属于跨域请求。浏览器会先发 OPTIONS 预检，
+ * 不处理的话手机上只会看到「网络连不上」，实际请求根本没发出去。
+ */
+const LOCAL_ORIGINS = new Set([
+  'http://localhost', 'https://localhost',
+  'http://127.0.0.1', 'https://127.0.0.1',
+  'capacitor://localhost', 'ionic://localhost',
+]);
+
+app.use((req, res, next) => {
+  const origin = req.get('origin');
+  if (origin) {
+    const host = req.get('host');
+    const sameSite = origin === `https://${host}` || origin === `http://${host}`;
+    if (sameSite || LOCAL_ORIGINS.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');

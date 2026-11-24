@@ -78,8 +78,10 @@ jobs:
           body: |
             安卓安装包（debug 签名，直接安装即可）。
 
-            - 手机浏览器打开 https://ledger.krshare.site 走 PWA 也可以，而且会自动更新
-            - APK 里前端是打包进去的，更新要重装新版本
+            - 这个包是**壳模式**：打开时加载线上页面，界面更新不用重装
+            - 首次打开需要联网；断网会显示本地提示页，网络恢复后自动重试
+            - 从旧版升级过来的话，需要在 App 里重新登录一次（本地登录态不通用）
+            - 不想装 APK 也行：手机浏览器打开 https://ledger.krshare.site 效果一样，还自动更新
           generate_release_notes: true
 
   ios:

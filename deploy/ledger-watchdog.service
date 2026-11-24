@@ -1,0 +1,8 @@
+[Unit]
+Description=小账本服务自愈看门狗
+After=ledger.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ledger-app/deploy/watchdog.sh
+Nice=15

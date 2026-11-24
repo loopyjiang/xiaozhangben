@@ -1,0 +1,13 @@
+[Unit]
+Description=每天凌晨备份小账本账目
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+# 关机错过的补跑一次
+Persistent=true
+# 加几分钟抖动，避免和别的定时任务挤在一起
+RandomizedDelaySec=300
+Unit=ledger-backup.service
+
+[Install]
+WantedBy=timers.target

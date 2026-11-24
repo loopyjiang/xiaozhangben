@@ -1,0 +1,32 @@
+name: 线上存活检查
+
+on:
+  schedule:
+    # 每 30 分钟探一次。GitHub 的 cron 走 UTC，高峰期可能延迟几分钟，不影响。
+    # 注意：仓库连续 60 天没有 push 的话，schedule 会被 GitHub 自动停用。
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    name: 探活
+    runs-on: ubuntu-latest
+    steps:
+      - name: 请求 /api/health
+        run: |
+          set -uo pipefail
+          URL="https://ledger.krshare.site/api/health"
+          for i in 1 2 3; do
+            BODY=$(curl -sf --max-time 20 "$URL" || true)
+            if printf '%s' "$BODY" | grep -q '"ok":true'; then
+              echo "第 $i 次通过：$BODY"
+              exit 0
+            fi
+            echo "第 $i 次失败，10 秒后重试"
+            sleep 10
+          done
+          echo "::error::小账本连续 3 次探活失败，服务器或域名出问题了"
+          exit 1

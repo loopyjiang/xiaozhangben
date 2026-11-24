@@ -153,8 +153,18 @@ chown -R "$RUN_USER:$RUN_USER" "$DATA_DIR" "$APP_DIR"
 # ---------- 5. systemd ----------
 say "5/7 注册服务"
 sed -e "s#/opt/ledger-app#${APP_DIR}#g" deploy/ledger.service > /etc/systemd/system/ledger.service
+
+# 每日备份 + 自愈看门狗：都靠 timer 跑，装一次就一直在
+for unit in ledger-backup ledger-watchdog; do
+  sed -e "s#/opt/ledger-app#${APP_DIR}#g" "deploy/${unit}.service" > "/etc/systemd/system/${unit}.service"
+  cp "deploy/${unit}.timer" "/etc/systemd/system/${unit}.timer"
+done
+chmod +x "$APP_DIR/deploy/backup.sh" "$APP_DIR/deploy/watchdog.sh" 2>/dev/null || true
+
 systemctl daemon-reload
 systemctl enable ledger >/dev/null 2>&1 || true
+systemctl enable --now ledger-backup.timer >/dev/null 2>&1 || true
+systemctl enable --now ledger-watchdog.timer >/dev/null 2>&1 || true
 systemctl restart ledger
 sleep 2
 if systemctl is-active --quiet ledger; then

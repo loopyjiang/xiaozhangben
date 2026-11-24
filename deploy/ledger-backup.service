@@ -1,0 +1,10 @@
+[Unit]
+Description=小账本每日账目备份
+After=ledger.service
+Documentation=file:///opt/ledger-app/deploy/backup.sh
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ledger-app/deploy/backup.sh
+Nice=10
+IOSchedulingClass=idle

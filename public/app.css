@@ -419,6 +419,35 @@ img { -webkit-user-drag: none; user-select: none; }
   color: var(--ink);
 }
 .hint { font-size: 12px; color: var(--ink-3); }
+.head-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+  background: var(--pink-tint);
+  flex: 0 0 auto;
+}
+.icon-btn:active { background: var(--pink-soft); }
+.icon-btn.on { background: var(--pink); color: #fff; }
+
+.search-row { display: flex; gap: 8px; align-items: center; margin: 0 4px 12px; }
+.search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 16px;
+  outline: none;
+  -webkit-appearance: none;
+}
+.search-input:focus { border-color: var(--pink); }
+.search-cancel { font-size: 13px; color: var(--ink-2); flex: 0 0 auto; padding: 4px 2px; }
 .hint-btn {
   margin-left: auto;
   margin-right: 10px;
@@ -746,6 +775,8 @@ img { -webkit-user-drag: none; user-select: none; }
   padding: 4px 2px;
 }
 .sheet-save { color: var(--pink); font-weight: 600; }
+/* 删除是危险操作，别和「存修改」用同一个粉色 */
+.sheet-cancel.danger { color: #c94b4b; font-weight: 600; }
 
 .type-switch {
   display: flex;

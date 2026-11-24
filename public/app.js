@@ -70,6 +70,10 @@ const state = {
   view: 'home',
   offline: false,
   draft: null,
+  /* 非空表示记账面板正在改已有的那一笔 */
+  editing: null,
+  /* 搜索关键词，空串表示没在搜 */
+  search: '',
   installEvent: null,
 };
 
@@ -337,16 +341,21 @@ function renderMonthLabel() {
   }
 }
 
-function renderSummary(list) {
+function renderSummary(list, searching = false) {
   let expense = 0, income = 0;
   for (const r of list) {
     if (r.type === 'income') income += Number(r.amount) || 0;
     else expense += Number(r.amount) || 0;
   }
-  const oneDay = Boolean(state.month.d);
-  $('sumCap').textContent = oneDay ? `${state.month.m}月${state.month.d}日支出` : '本月支出';
-  $('listTitle').textContent = oneDay ? `${state.month.m}月${state.month.d}日的账` : '这个月的账';
-  $('backToMonth').hidden = !oneDay;
+  const oneDay = Boolean(state.month.d) && !searching;
+  if (searching) {
+    $('sumCap').textContent = `搜到 ${list.length} 笔，支出`;
+    $('listTitle').textContent = '搜索结果';
+  } else {
+    $('sumCap').textContent = oneDay ? `${state.month.m}月${state.month.d}日支出` : '本月支出';
+    $('listTitle').textContent = oneDay ? `${state.month.m}月${state.month.d}日的账` : '这个月的账';
+  }
+  $('backToMonth').hidden = searching || !oneDay;
   $('sumExpense').textContent = money(expense);
   $('sumIncome').textContent = `¥${money(income)}`;
   $('sumBalance').textContent = `¥${money(income - expense)}`;
@@ -354,12 +363,14 @@ function renderSummary(list) {
   $('listHint').textContent = list.length ? `共 ${list.length} 笔` : '';
 }
 
-function renderList(list) {
+function renderList(list, searching = false) {
   const box = $('recordList');
   if (!list.length) {
+    const title = searching ? '没搜到相关账目' : (state.month.d ? '这天还没记账' : '这个月还没有记账');
+    const tail = searching ? '换个词试试，金额、备注、分类都能搜' : '点右下角的 + 记一笔';
     box.innerHTML = `<div class="empty">
       <img src="loopy/04-bag.webp" alt="" width="132" height="132">
-      <b>${state.month.d ? '这天还没记账' : '这个月还没有记账'}</b>点右下角的 + 记一笔
+      <b>${title}</b>${tail}
     </div>`;
     return;
   }
@@ -481,6 +492,19 @@ function monthRecords() {
   return state.month.d ? all.filter((r) => String(r.date) === dayKey()) : all;
 }
 
+/* 搜索跨全部账目，不受当月和选中的日期限制 */
+function searchRecords(keyword) {
+  const k = String(keyword || '').trim().toLowerCase();
+  if (!k) return [];
+  return state.records.filter((r) => {
+    const text = `${r.category} ${r.note || ''} ${r.type === 'income' ? '收入' : '支出'}`.toLowerCase();
+    if (text.includes(k)) return true;
+    if (String(r.date).includes(k)) return true;
+    const amount = Number(r.amount);
+    return String(amount).includes(k) || amount.toFixed(2).includes(k);
+  });
+}
+
 function renderSettings() {
   $('userName').textContent = displayName();
 
@@ -562,10 +586,12 @@ function renderAnalysis() {
 
 function renderAll() {
   renderMonthLabel();
-  const list = monthRecords();
-  renderSummary(list);
-  renderList(list);
-  /* 统计页永远按整月算，选中某天也不缩水 */
+  const keyword = String(state.search || '').trim();
+  const searching = Boolean(keyword);
+  const list = searching ? searchRecords(keyword) : monthRecords();
+  renderSummary(list, searching);
+  renderList(list, searching);
+  /* 统计页永远按整月算，选中某天或搜索时也不缩水 */
   renderStats(state.records.filter((r) => String(r.date).startsWith(monthKey())));
   renderAnalysis();
   renderSettings();
@@ -587,27 +613,60 @@ function switchView(view) {
 
 /* ================= 记账面板 ================= */
 
-function openSheet(type = 'expense') {
+function openSheet(type = 'expense', record = null) {
+  const editing = Boolean(record);
+  state.editing = record ? record.id : null;
+
+  const draftType = editing ? record.type : type;
   state.draft = {
-    type,
-    amount: '0',
-    category: CATS[type][0][0],
-    note: '',
-    /* 正在看某一天时，记一笔默认就记到那天 */
-    date: state.month.d ? dayKey() : todayStr(),
+    type: draftType,
+    amount: editing ? String(record.amount) : '0',
+    category: editing ? record.category : CATS[draftType][0][0],
+    note: editing ? (record.note || '') : '',
+    /* 新记账：正在看某一天就记到那天；编辑：用原来的日期 */
+    date: editing ? record.date : (state.month.d ? dayKey() : todayStr()),
   };
+
   $('dateInput').value = state.draft.date;
-  $('noteInput').value = '';
-  $('amountText').textContent = '0';
-  document.querySelectorAll('.type-btn').forEach((b) => b.classList.toggle('active', b.dataset.type === type));
+  $('noteInput').value = state.draft.note;
+  $('amountText').textContent = state.draft.amount;
+  document.querySelectorAll('.type-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.type === draftType);
+  });
+
+  $('sheetCancel').textContent = editing ? '删除' : '取消';
+  $('sheetCancel').classList.toggle('danger', editing);
+  $('sheetSave').textContent = editing ? '存修改' : '保存';
+
   renderCatGrid();
   $('sheet').classList.add('open');
   $('sheetMask').classList.add('show');
 }
 
 function closeSheet() {
+  state.editing = null;
   $('sheet').classList.remove('open');
   $('sheetMask').classList.remove('show');
+}
+
+/* 编辑中的那笔账，点「删除」走这里 */
+async function deleteEditing() {
+  const id = state.editing;
+  const rec = state.records.find((r) => r.id === id);
+  if (!rec) { closeSheet(); return; }
+
+  if (!confirm(`删掉这笔「${rec.category} ¥${money(rec.amount)}」？\n删了就找不回来了`)) return;
+
+  try {
+    await api(`/api/records/${id}`, { method: 'DELETE' });
+    state.records = state.records.filter((r) => r.id !== id);
+    writeCache();
+    closeSheet();
+    renderAll();
+    toast('已删除');
+  } catch (err) {
+    toast(err.message);
+  }
 }
 
 function renderCatGrid() {
@@ -651,15 +710,33 @@ async function saveRecord() {
     date: $('dateInput').value || todayStr(),
   };
 
+  const editingId = state.editing;
   $('sheetSave').disabled = true;
   try {
+    if (editingId) {
+      const data = await api(`/api/records/${editingId}`, { method: 'PATCH', body: payload });
+      const rec = data.record;
+      const i = state.records.findIndex((r) => r.id === editingId);
+      if (i >= 0) state.records[i] = rec;
+      else state.records.unshift(rec);
+      writeCache();
+
+      /* 改完跳回整月，不然改了日期还在日视图里会“看不见” */
+      const [y, m] = rec.date.split('-').map(Number);
+      state.month = { y, m, d: null };
+      closeSheet();
+      renderAll();
+      notifyHappy(`改成 ${rec.category} ¥${money(rec.amount)} 了`);
+      return;
+    }
+
     const data = await api('/api/records', { method: 'POST', body: payload });
     const rec = data.record;
     state.records.unshift(rec);
     writeCache();
 
     const [y, m] = rec.date.split('-').map(Number);
-    state.month = { y, m };
+    state.month = { y, m, d: null };
     closeSheet();
     renderAll();
     setPetMood('cheer', 1500);
@@ -1586,6 +1663,28 @@ async function exportBackup() {
   }
 }
 
+/* Excel 能直接打开的表格版，跟 JSON 备份不是一回事 */
+async function exportCsv() {
+  try {
+    const res = await fetch(`${API_BASE}/api/export?format=csv`, {
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    if (!res.ok) throw new Error('导出失败');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `小账本-${todayStr()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('已导出表格');
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
 async function importBackup(file) {
   try {
     const text = await file.text();
@@ -1731,7 +1830,11 @@ function bind() {
   $('profileSave').addEventListener('click', saveProfile);
 
   $('fabAdd').addEventListener('click', () => openSheet('expense'));
-  $('sheetCancel').addEventListener('click', closeSheet);
+  /* 编辑状态下左边那颗是「删除」，其它情况是「取消」 */
+  $('sheetCancel').addEventListener('click', () => {
+    if (state.editing) deleteEditing();
+    else closeSheet();
+  });
   $('sheetMask').addEventListener('click', closeSheet);
   $('sheetSave').addEventListener('click', saveRecord);
 
@@ -1756,22 +1859,39 @@ function bind() {
     if (btn) pressKey(btn.dataset.k);
   });
 
-  $('recordList').addEventListener('click', async (e) => {
+  /* 点一笔账 → 打开编辑面板，删除挪进面板里 */
+  $('recordList').addEventListener('click', (e) => {
     const row = e.target.closest('.record');
     if (!row) return;
     const rec = state.records.find((r) => r.id === row.dataset.id);
     if (!rec) return;
-    if (!confirm(`删除这笔「${rec.category} ¥${money(rec.amount)}」？`)) return;
-    try {
-      await api(`/api/records/${rec.id}`, { method: 'DELETE' });
-      state.records = state.records.filter((r) => r.id !== rec.id);
-      writeCache();
-      renderAll();
-      toast('已删除');
-    } catch (err) {
-      toast(err.message);
-    }
+    openSheet(rec.type, rec);
   });
+
+  /* ---- 搜索 ---- */
+  const closeSearch = () => {
+    state.search = '';
+    $('searchInput').value = '';
+    $('searchRow').hidden = true;
+    $('searchBtn').classList.remove('on');
+    renderAll();
+  };
+
+  $('searchBtn').addEventListener('click', () => {
+    const opening = $('searchRow').hidden;
+    if (!opening) { closeSearch(); return; }
+    $('searchRow').hidden = false;
+    $('searchBtn').classList.add('on');
+    $('searchInput').value = state.search || '';
+    $('searchInput').focus();
+  });
+
+  $('searchInput').addEventListener('input', (e) => {
+    state.search = e.target.value;
+    renderAll();
+  });
+
+  $('searchCancel').addEventListener('click', closeSearch);
 
   $('aiForm').addEventListener('submit', askAI);
   $('aiThinkBtn').addEventListener('click', askAnalyze);
@@ -1785,6 +1905,7 @@ function bind() {
   bindChat();
 
   $('exportBtn').addEventListener('click', exportBackup);
+  $('exportCsvBtn').addEventListener('click', exportCsv);
   $('importBtn').addEventListener('click', () => $('importFile').click());
   $('importFile').addEventListener('change', (e) => {
     const file = e.target.files?.[0];

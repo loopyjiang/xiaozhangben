@@ -105,7 +105,20 @@
       <div class="section-head">
         <h2 id="listTitle">这个月的账</h2>
         <button class="hint-btn" id="backToMonth" type="button" hidden>看整月</button>
-        <span class="hint" id="listHint"></span>
+        <div class="head-right">
+          <span class="hint" id="listHint"></span>
+          <button class="icon-btn" id="searchBtn" type="button" aria-label="搜索账目">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.6" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M10.6 10.6 14 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="search-row" id="searchRow" hidden>
+        <input class="search-input" id="searchInput" type="search" placeholder="搜备注、分类或金额"
+               autocomplete="off" enterkeyhint="search">
+        <button class="search-cancel" id="searchCancel" type="button">收起</button>
       </div>
       <div class="record-list" id="recordList"></div>
     </section>
@@ -188,11 +201,12 @@
 
       <div class="card">
         <h3>数据</h3>
-        <p class="desc">账都在服务器上，换手机登录同一个账号就能看到。隔一段时间导出一份更保险。</p>
+        <p class="desc">账都在服务器上，换手机登录同一个账号就能看到。服务器每天凌晨自动备份一份，你也可以随时导出。</p>
         <div class="row-btns">
           <button class="btn ghost" id="exportBtn">导出备份</button>
-          <button class="btn ghost" id="importBtn">导入备份</button>
+          <button class="btn ghost" id="exportCsvBtn">导出表格</button>
         </div>
+        <button class="btn ghost full" id="importBtn">导入备份</button>
         <input type="file" id="importFile" accept="application/json,.json" hidden>
       </div>
 
@@ -215,7 +229,7 @@
       </div>
 
       <button class="btn ghost danger full" id="logoutBtn">退出登录</button>
-      <p class="version">Loopy 小账本 v1.4.3 · 自托管</p>
+      <p class="version">Loopy 小账本 v1.5 · 自托管</p>
       <a class="icp" id="icpSettings" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" hidden></a>
     </section>
 

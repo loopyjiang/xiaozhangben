@@ -229,6 +229,20 @@ app.post('/api/records', auth, (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+app.patch('/api/records/:id', auth, (req, res, next) => {
+  const rec = store.records.find((r) => r.id === req.params.id && r.userId === req.user.id);
+  if (!rec) return res.status(404).json({ error: '这笔账不存在，可能已经删了' });
+  try {
+    /* 用原值兜底，前端只传改动的字段也不会丢东西 */
+    const next_ = sanitizeRecord({ ...rec, ...(req.body || {}) });
+    Object.assign(rec, next_, { updatedAt: new Date().toISOString() });
+    store.save();
+    res.json({ record: rec });
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.delete('/api/records/:id', auth, (req, res) => {
   const i = store.records.findIndex((r) => r.id === req.params.id && r.userId === req.user.id);
   if (i < 0) return res.status(404).json({ error: '记录不存在' });
@@ -477,8 +491,36 @@ app.post('/api/ai/chat', auth, async (req, res, next) => {
 });
 
 /* ---------- 备份 ---------- */
+/* 导出：默认 JSON（能再导回来），?format=csv 给 Excel 用 */
+function csvCell(value) {
+  const s = String(value ?? '');
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
 app.get('/api/export', auth, (req, res) => {
-  const records = store.records.filter((r) => r.userId === req.user.id);
+  const records = store.records
+    .filter((r) => r.userId === req.user.id)
+    .sort((a, b) => (a.date === b.date ? a.createdAt.localeCompare(b.createdAt) : a.date.localeCompare(b.date)));
+
+  if (String(req.query.format || '').toLowerCase() === 'csv') {
+    const lines = [['日期', '类型', '分类', '金额', '备注'].join(',')];
+    for (const r of records) {
+      lines.push([
+        r.date,
+        r.type === 'income' ? '收入' : '支出',
+        r.category,
+        Number(r.amount).toFixed(2),
+        r.note || '',
+      ].map(csvCell).join(','));
+    }
+    /* 前面那个 BOM 是给 Excel 认 UTF-8 的，不然中文全是乱码 */
+    const csv = `\uFEFF${lines.join('\r\n')}\r\n`;
+    const day = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="ledger-${day}.csv"`);
+    return res.send(csv);
+  }
+
   res.setHeader('Content-Disposition', `attachment; filename="ledger-${req.user.username}.json"`);
   res.json({
     app: 'ledger-app',

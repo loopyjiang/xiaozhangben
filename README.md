@@ -64,7 +64,9 @@
 
 安装时系统会提示「未知来源应用」，允许一次即可。这是 debug 签名的包，能正常安装使用，只是不能上架应用商店。
 
-> APK 里的前端是打包进去的，界面更新要重装新版本；只想看最新界面就别装 APK。
+> APK 是**壳模式**：打开时加载线上页面，所以界面更新不用重装，装一次就行。
+> 代价是首次打开必须联网（之后 Service Worker 会缓存，断网也能看账）。
+> 断网启动会显示一个本地的「连不上」页，网络恢复后自动重试。
 >
 > 如果下载慢，把链接发到微信「文件传输助手」，手机上点开另存也行。
 
@@ -325,18 +327,35 @@ curl -s https://你的域名/api/health
 {"ok":true,"aiEnabled":true,"ai":{"model":"qwen3.8-max","thinking":false},"users":2,"records":31,"icp":"京ICP备xxxxxxxx号-1"}
 ```
 
-**备份**：App 里「我的」页有导出备份；服务器上直接备份数据文件更彻底：
+**备份**：装好脚本后每天凌晨 3:30 自动跑一次，打包到 `/var/backups/ledger/`，保留 30 天。
 
 ```bash
-sudo cp /var/lib/ledger/db.json ~/ledger-$(date +%F).json
+sudo /opt/ledger-app/deploy/backup.sh          # 手动跑一次
+ls -lh /var/backups/ledger/                    # 看历史备份
+systemctl list-timers ledger-backup           # 看下次什么时候跑
+journalctl -u ledger-backup -n 20             # 看有没有失败
 ```
+
+脚本会先确认 `db.json` 是合法 JSON 再打包，打完解压自检，坏文件不会覆盖好备份。
+**不备份 `.aisecret`**——那是用户 Key 的主密钥，跟账目放一起反而降低安全性；Key 丢了重填就行。
+
+还原：把某个 `db-*.json.gz` 解开，用 App 的「导入备份」功能灌回去（导入是覆盖，不是合并）。
+
+**自愈看门狗**：`ledger-watchdog.timer` 每 5 分钟探一次本机 health，
+连续两次不通就 `systemctl restart ledger`，重启后再验一遍。
+
+**外部探活**：`.github/workflows/uptime.yml` 每 30 分钟从外网 curl 一次 `/api/health`，
+连续 3 次失败 workflow 报红，GitHub 会给仓库 owner 发邮件。
+注意仓库连续 60 天没 push 的话，GitHub 会自动停用这个 schedule。
 
 **证书续期**：certbot 装好后会自动续，不用管。想确认：`systemctl list-timers | grep certbot`。
 
 ### 几个要注意的坑
 
 1. **服务器是唯一单点**。停机、欠费、到期，App 就打不开。务必开自动续费。
-2. **安卓端的前端是打包进 APK 的**。改了界面要**重新装 APK** 才能看到；iPhone 和浏览器刷新页面就行。后端（AI、接口）改动则三端都立即生效。
+2. **安卓 APK 是壳**（`capacitor.config.json` 里配了 `server.url`）。改了界面部署上去，
+   手机上重开 App 就是新的，三端都不需要重装。只有在改 `capacitor.config.json`
+   本身或加原生插件时才需要重新打包。
 3. **iPhone 长期不打开，系统可能清掉本地缓存**，重开会变成未登录。数据全在服务器上，重新登录就回来了。
 4. **`deploy/install.sh` 会重写 nginx 的 80 段配置**（检测到已有 443 时跳过）。日常升级请用 `update.sh`。
 
@@ -382,7 +401,7 @@ ledger-app/
 - **后端**：Node.js 18+ / Express 4，数据用 JSON 文件 + 原子写入（2G 小内存机器上不装数据库，避免原生模块编译问题）
 - **前端**：原生 HTML/CSS/JS，零框架零构建，首屏约 100 KB
 - **PWA**：manifest + Service Worker，可加到主屏幕、可离线查看
-- **原生壳**：Capacitor 6，页面打包进 APK，从本地加载
+- **原生壳**：Capacitor 6，`server.url` 指向线上，App 只做外壳（本地打包的 `offline.html` 用作断网兜底）
 - **CI**：GitHub Actions，JDK 21 + Gradle 出 debug 包
 
 选型的核心约束是**服务器只有 2 Mbps 带宽**：不引框架、不引 UI 库，所有资源加起来也就一百多 KB。

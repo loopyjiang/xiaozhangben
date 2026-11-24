@@ -3,7 +3,8 @@
   "appName": "Loopy 小账本",
   "webDir": "public",
   "server": {
-    "androidScheme": "http",
+    "url": "https://ledger.krshare.site",
+    "errorPath": "offline.html",
     "cleartext": true
   },
   "android": {

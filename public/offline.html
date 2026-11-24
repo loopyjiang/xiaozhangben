@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#fff5f8">
+<title>连不上小账本</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #fff5f8;
+    color: #694454;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    padding-top: calc(32px + env(safe-area-inset-top));
+    padding-bottom: calc(32px + env(safe-area-inset-bottom));
+  }
+  .box { width: 100%; max-width: 300px; text-align: center; }
+  .face {
+    width: 96px; height: 96px;
+    margin: 0 auto 18px;
+    border-radius: 50%;
+    background: linear-gradient(160deg, #fde8f0, #f7c9dc);
+    display: grid;
+    place-items: center;
+    font-size: 40px;
+    font-weight: 700;
+    color: #c4608b;
+    box-shadow: 0 8px 24px rgba(217, 118, 160, 0.22);
+  }
+  h1 { font-size: 19px; margin: 0 0 8px; font-weight: 600; }
+  p { font-size: 13px; line-height: 1.7; color: #98798a; margin: 0 0 22px; }
+  button {
+    width: 100%;
+    padding: 14px;
+    border: 0;
+    border-radius: 14px;
+    background: #d976a0;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 500;
+    font-family: inherit;
+  }
+  button:active { background: #c4608b; }
+  .tip { margin-top: 16px; font-size: 11px; color: #bfa3b0; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="face">¥</div>
+    <h1>暂时连不上小账本</h1>
+    <p>检查一下手机有没有网（Wi-Fi 或流量），然后点下面重试。<br>账目都在服务器上，不会丢。</p>
+    <button type="button" onclick="retry()">重试</button>
+    <div class="tip">一直打不开的话，找帮你搭这个账本的人</div>
+  </div>
+  <script>
+    function retry() {
+      location.replace('https://ledger.krshare.site/?t=' + Date.now());
+    }
+    /* 网络恢复时自动重试一次，省得用户手动点 */
+    window.addEventListener('online', () => setTimeout(retry, 600));
+  </script>
+</body>
+</html>
